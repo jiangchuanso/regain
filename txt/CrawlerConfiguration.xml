@@ -114,6 +114,7 @@
    |    (alias for org.apache.lucene.analysis.fr.FrenchAnalyzer)
    |  * italian or italiano: For the italian language
    |    (alias for org.apache.lucene.analysis.it.ItalianAnalyzer)
+   |  * that's no alias for chinese,but you will need to use full type name: org.apache.lucene.analysis.cjk.CJKAnalyzer
    |
    | Get more information at:
    | http://lucene.apache.org/java/3_1_0/api/contrib-analyzers/index.html?overview-summary.html
