@@ -262,18 +262,19 @@
     <echo message="Generating JavaDoc documentation ..." />
     <delete dir="build/doc"/>
     <mkdir dir="build/doc/javadoc"/>
-    <javadoc packagenames="*"
-             sourcepathref="docpath"
-             classpathref="classpath"
-             destdir="build/doc/javadoc"
-             doctitle="${doc.title}"
-             windowtitle="${doc.title}"
-             header="${doc.header}"
-             bottom="${doc.bottom}"
-             stylesheetfile="txt/stylesheet.css"
-             access="private"
-             charset="UTF-8"
-             failonerror="true">
+             <javadoc packagenames="*"
+              sourcepathref="docpath"
+              classpathref="classpath"
+              destdir="build/doc/javadoc"
+              doctitle="${doc.title}"
+              windowtitle="${doc.title}"
+              header="${doc.header}"
+              bottom="${doc.bottom}"
+              stylesheetfile="txt/stylesheet.css"
+              access="private"
+              charset="UTF-8"
+              encoding="UTF-8"
+              failonerror="true">
              <!-- additionalparam="-breakiterator" -->
       <link offline="true"
             href="${java-api-location}"
@@ -303,10 +304,11 @@
            debug="${debug}"
            deprecation="true"
            executable="${java.dir}/bin/javac"
-           source="1.6"
-           target="1.6"
+           source="1.8"
+           target="1.8"
            fork="true"
-           includeantruntime="false">
+           includeantruntime="false"
+           encoding="UTF-8">
       <compilerarg value="-Xlint"/>
       <src>
         <path refid="sourcepath"/>
@@ -337,7 +339,8 @@
     <javac destdir="build/classes"
            debug="${debug}"
            deprecation="true"
-           target="1.6"
+           target="1.8"
+           encoding="UTF-8"
            includeantruntime="false">
       <src path="test/src"/>
       <exclude name="net/sf/regain/test/integration/**"/>
@@ -364,7 +367,8 @@
     <javac destdir="build/classes"
            debug="${debug}"
            deprecation="true"
-           target="1.6"
+           target="1.8"
+           encoding="UTF-8"
            includeantruntime="false">
       <src>
         <pathelement location="test/src/net/sf/regain/test/integration"/>
@@ -753,6 +757,7 @@
       <include name="org/apache/lucene/**"/>
       <include name="org/tartarus/**"/>
       <include name="org/apache/log4j/**"/>
+      <include name="org/apache/logging/**"/>
       <include name="org/apache/regexp/**"/>
       <include name="org/apache/commons/**"/>
 
@@ -1321,7 +1326,7 @@
     <mkdir dir="${jacobgen-classes.dir}"/>
     <javac srcdir="${jacobgen-src.dir}"
            destdir="${jacobgen-classes.dir}"
-           target="1.6"
+           target="1.8"
            debug="${debug}"
            deprecation="true">
       <classpath>
