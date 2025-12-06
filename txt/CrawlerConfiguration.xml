@@ -119,7 +119,7 @@
    | Get more information at:
    | http://lucene.apache.org/java/3_1_0/api/contrib-analyzers/index.html?overview-summary.html
    +-->
-    <analyzerType>chinese</analyzerType>
+    <analyzerType>org.apache.lucene.analysis.cjk.CJKAnalyzer</analyzerType>
 
   <!--
    | Contains all words that should not be indexed.
