@@ -178,23 +178,3 @@ jobs:
             
             ## 安装说明
             请查看项目文档了解如何部署和使用。
-
-      - name: Upload Release Assets
-        run: |
-          # 上传所有构建产物
-          for file in artifacts/*; do
-            if [ -f "$file" ]; then
-              echo "Uploading $file..."
-              curl -X POST \
-                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Content-Type: application/octet-stream" \
-                --data-binary @"$file" \
-                "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.create_release.outputs.id }}/assets?name=$(basename $file)"
-            fi
-          done
-
-      - name: Upload additional files to release (using action)
-        uses: softprops/action-gh-release@v1
-        with:
-          files: artifacts/*
-          token: ${{ secrets.GITHUB_TOKEN }}
