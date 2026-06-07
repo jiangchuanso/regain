@@ -118,7 +118,7 @@ public interface CrawlerConfig {
    * Returns the maximum number of terms that will be indexed for a single field
    * in a document.
    * <p>
-   * Is <= 0 if lucene's default should be used.
+   * Is &lt;= 0 if lucene's default should be used.
    *
    * @return the maximum number of terms per document.
    */

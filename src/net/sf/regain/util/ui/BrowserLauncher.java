@@ -79,13 +79,13 @@ public class BrowserLauncher {
   /** The com.apple.MacOS.AEDesc class */
   private static Class aeDescClass;
 
-  /** The <init>(int) method of com.apple.MacOS.AETarget */
+  /** The {@literal <init>(int)} method of com.apple.MacOS.AETarget */
   private static Constructor aeTargetConstructor;
 
-  /** The <init>(int, int, int) method of com.apple.MacOS.AppleEvent */
+  /** The {@literal <init>(int, int, int)} method of com.apple.MacOS.AppleEvent */
   private static Constructor appleEventConstructor;
 
-  /** The <init>(String) method of com.apple.MacOS.AEDesc */
+  /** The {@literal <init>(String)} method of com.apple.MacOS.AEDesc */
   private static Constructor aeDescConstructor;
 
   /** The findFolder method of com.apple.mrj.MRJFileUtils */

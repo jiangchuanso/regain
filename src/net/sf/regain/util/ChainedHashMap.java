@@ -37,8 +37,10 @@ import java.util.Set;
  * (Helper Class)
  *
  * Contract:
+ * <ul>
  * <li>It is possible to put several identical key-value pairs (i.e. where key and value is equal)
  * <li>entrySet is not supported. Instead, it can be iterated over all entries.
+ * </ul>
  *
  * @param <K>	Key
  * @param <V>	Value
@@ -248,18 +250,23 @@ public class ChainedHashMap<K, V> implements Map<K, V>, Iterable<Map.Entry<K, V>
 		}
 	}
 
-	public boolean remove(K key, V value)
+	@Override
+	public boolean remove(Object key, Object value)
 	{
-		List<V> list = hashtable.get(key);
+		@SuppressWarnings("unchecked")
+		K k = (K) key;
+		@SuppressWarnings("unchecked")
+		V v = (V) value;
+		List<V> list = hashtable.get(k);
 
 		if (list == null)
 			return false;
 
-		boolean removed = list.remove(value);
+		boolean removed = list.remove(v);
 		if (removed)
 		{
 			if (list.isEmpty())
-				hashtable.remove(key);
+				hashtable.remove(k);
 			size--;
 		}
 		return removed;

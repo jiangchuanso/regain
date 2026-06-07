@@ -34,28 +34,28 @@ import net.sf.regain.search.SearchToolkit;
 import net.sf.regain.search.access.SearchAccessController;
 import net.sf.regain.search.config.IndexConfig;
 import net.sf.regain.util.sharedtag.PageRequest;
-import org.apache.commons.collections.Factory;
-import org.apache.commons.collections.ListUtils;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.document.CompressionTools;
+import net.sf.regain.util.CompressionTools;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.MultiReader;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryParser.ParseException;
-import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopDocsCollector;
 import org.apache.lucene.search.TopFieldCollector;
 import org.apache.lucene.search.WildcardQuery;
 import org.apache.lucene.search.highlight.Highlighter;
@@ -85,7 +85,7 @@ public class SearchResultsImpl implements SearchResults {
   /** The hits of this search. */
   private ScoreDoc[] hitScoreDocs;
   /** The DocCollector. */
-  private TopDocsCollector<FieldValueHitQueue.Entry> topDocsCollector;
+  private TopFieldCollector topDocsCollector;
 
   private static Pattern mimetypeFieldPattern = Pattern.compile("(mimetype:\"([^:]*)\")");
   private static Pattern negativeMimetypeFieldPattern = Pattern.compile("((-|!|NOT )mimetype:\"([^:]*)\")");
@@ -105,13 +105,7 @@ public class SearchResultsImpl implements SearchResults {
   private static Logger mLog = Logger.getLogger(SearchResultsImpl.class);
 
   /** held the transformed hits. */
-  private List lazyHitList = ListUtils.lazyList(new ArrayList(), new Factory() {
-    /** Factory for create a new LazyList-entry. */
-    @Override
-    public Object create() {
-      return new Document();
-    }
-  });
+  private List<Document> lazyHitList = new ArrayList<>();
 
   /**
    * Creates an instanz of SearchResults. This class can search over a single
@@ -136,8 +130,8 @@ public class SearchResultsImpl implements SearchResults {
 
     String queryText = null;
 
-    BooleanQuery mimeQuery = new BooleanQuery();
-    queryText = removeMimetypeQuery(mQueryText, mimeQuery);
+    BooleanQuery.Builder mimeBuilder = new BooleanQuery.Builder();
+    queryText = removeMimetypeQuery(mQueryText, mimeBuilder);
 
     try {
     // If there is at least on index
@@ -170,7 +164,11 @@ public class SearchResultsImpl implements SearchResults {
         mAnalyzer = indexSearcherManagers[0].getAnalyzer();
         mIndexName = indexConfigs[0].getName();
         readerArray[0] = mIndexSearcher.getIndexReader();
-        mMultiReader = new MultiReader(readerArray, false);
+        try {
+          mMultiReader = new MultiReader(readerArray, false);
+        } catch (IOException ex) {
+          throw new RegainException("Error creating MultiReader", ex);
+        }
 
       } else {
         // Collect all IndexSearchers and instantiate a MultiSearcher
@@ -178,7 +176,11 @@ public class SearchResultsImpl implements SearchResults {
           searchers[j] = indexSearcherManagers[j].getIndexSearcher();
           readerArray[j] = searchers[j].getIndexReader();
         }
-        mMultiReader = new MultiReader(readerArray, false);
+        try {
+          mMultiReader = new MultiReader(readerArray, false);
+        } catch (IOException ex) {
+          throw new RegainException("Error creating MultiReader", ex);
+        }
 
         if (indexSearcherManagers[0] != null) {
           indexSearcherManagers[0].releaseIndexSearcher(mIndexSearcher);
@@ -196,31 +198,32 @@ public class SearchResultsImpl implements SearchResults {
         // start the creation of the lucene query object
 
         try {
-          mQuery = new BooleanQuery();
+          BooleanQuery.Builder mQueryBuilder = new BooleanQuery.Builder();
 
           for (int k = 0; k < indexConfigs.length; k++) {
 
             String[] searchFieldArr = indexConfigs[k].getSearchFieldList();
             for (int i = 0; i < searchFieldArr.length; i++) {
 
-              QueryParser parser = new QueryParser(RegainToolkit.getLuceneVersion(), searchFieldArr[i], mAnalyzer);
+              QueryParser parser = new QueryParser(searchFieldArr[i], mAnalyzer);
               parser.setDefaultOperator(QueryParser.AND_OPERATOR);
               parser.setAllowLeadingWildcard(true);
 
 //              if (!searchFieldArr[i].equals("filename")) {
                 Query fieldQuery = parser.parse(queryText);
                 // Add as OR
-                mQuery.add(fieldQuery, Occur.SHOULD);
+                mQueryBuilder.add(fieldQuery, Occur.SHOULD);
 //              } else {
 //                // The field filename is not stemmed
-//                mQuery.add(new TermQuery(new Term("filename", queryText)), Occur.SHOULD);
+//                mQueryBuilder.add(new TermQuery(new Term("filename", queryText)), Occur.SHOULD);
 //              }
             }
             if (mLog.isDebugEnabled()) {
-              mLog.debug("Query: '" + queryText + "' -> '" + mQuery.toString() + "'");
+              mLog.debug("Query: '" + queryText + "' -> '" + mQueryBuilder.toString() + "'");
             }
 
           }
+          mQuery = mQueryBuilder.build();
         } catch (ParseException exc) {
           throw new RegainException("Error while parsing search pattern '" + mQueryText
                   + "': " + exc.getMessage(), exc);
@@ -233,14 +236,19 @@ public class SearchResultsImpl implements SearchResults {
       }
 
       // Add the mimetype field search
-      if (mimeQuery.getClauses().length > 0) {
+      BooleanQuery mimeQuery = mimeBuilder.build();
+      if (mimeQuery.clauses().size() > 0) {
 
         if (mQuery != null) {
-          mimeQuery.add(mQuery, Occur.MUST);
+          BooleanQuery.Builder finalBuilder = new BooleanQuery.Builder();
+          finalBuilder.add(mQuery, Occur.MUST);
+          for (BooleanClause clause : mimeQuery.clauses()) {
+            finalBuilder.add(clause);
+          }
+          mQuery = finalBuilder.build();
+        } else {
+          mQuery = mimeQuery;
         }
-
-        // Set the main query as query to use
-        mQuery = mimeQuery;
       }
 
 
@@ -252,7 +260,7 @@ public class SearchResultsImpl implements SearchResults {
           Sort sort = new Sort(sortingOption.getSortField());
           mLog.debug("Sort by:" + sortingOption.toString());
 
-          topDocsCollector = TopFieldCollector.create(sort, 10000, true, true, true, false);
+          topDocsCollector = TopFieldCollector.create(sort, 10000, Integer.MAX_VALUE);
 
           mIndexSearcher.search(mQuery, topDocsCollector);
           hitScoreDocs = topDocsCollector.topDocs().scoreDocs;
@@ -291,10 +299,10 @@ public class SearchResultsImpl implements SearchResults {
   /**
    * Create a Query from mime type terms and remove them from the query text
    * @param queryText   Original query text
-   * @param mainQuery   MIME clauses that were extracted from the query
+   * @param mainBuilder Builder receiving MIME clauses extracted from the query
    * @return  New query text (old query without the mime clauses)
    */
-  private String removeMimetypeQuery(String queryText, BooleanQuery mainQuery)
+  private String removeMimetypeQuery(String queryText, BooleanQuery.Builder mainBuilder)
   {
     if (queryText == null) {
       return null;
@@ -317,13 +325,13 @@ public class SearchResultsImpl implements SearchResults {
         queryText = queryText.replace(matcher.group(1), "");
         //System.out.println("Query after mimetype removing: " + queryText);
 
-        mainQuery.add(getAtomicMimeTypeQuery(mimeTypeFieldText), Occur.MUST_NOT);
+        mainBuilder.add(getAtomicMimeTypeQuery(mimeTypeFieldText), Occur.MUST_NOT);
       }
     } while (found);
 
     // Now positive mimes
 
-    BooleanQuery positiveMimes = new BooleanQuery();
+    BooleanQuery.Builder positiveMimesBuilder = new BooleanQuery.Builder();
     do
     {
       matcher = mimetypeFieldPattern.matcher(queryText);
@@ -335,11 +343,12 @@ public class SearchResultsImpl implements SearchResults {
         queryText = queryText.replace(matcher.group(1), "");
         //System.out.println("Query after mimetype removing: " + queryText);
 
-        positiveMimes.add(getAtomicMimeTypeQuery(mimeTypeFieldText), Occur.SHOULD);
+        positiveMimesBuilder.add(getAtomicMimeTypeQuery(mimeTypeFieldText), Occur.SHOULD);
       }
     } while (found);
-    if (positiveMimes.getClauses().length > 0) {
-      mainQuery.add(positiveMimes, Occur.MUST);
+    BooleanQuery positiveMimes = positiveMimesBuilder.build();
+    if (positiveMimes.clauses().size() > 0) {
+      mainBuilder.add(positiveMimes, Occur.MUST);
     }
 
     // Remove empty clauses that remained
@@ -362,21 +371,16 @@ public class SearchResultsImpl implements SearchResults {
    * @param mimeTypeFieldText   The value of a mime Type
    * @return  The corresponding query
    */
-  private BooleanQuery getAtomicMimeTypeQuery(String mimeTypeFieldText)
+  private Query getAtomicMimeTypeQuery(String mimeTypeFieldText)
   {
-    BooleanQuery mimetypeFieldQuery = new BooleanQuery();
     Term term = new Term("mimetype", mimeTypeFieldText);
 
-    Query query;
     if (mimeTypeFieldText.contains("*")) {
-      query = new WildcardQuery(term);
+      return new WildcardQuery(term);
     }
     else {
-      query = new TermQuery(term);
+      return new TermQuery(term);
     }
-
-    mimetypeFieldQuery.add(query, Occur.SHOULD);
-    return mimetypeFieldQuery;
   }
 
   /**
@@ -428,16 +432,21 @@ public class SearchResultsImpl implements SearchResults {
   public Document getHitDocument(int index) throws RegainException {
 
     try {
-      Document currDoc = (Document) lazyHitList.get(index);
-      // The document is empty, so it's created by the factory. Replace it with the real one
-      // at this position
-      if (currDoc.getFields().isEmpty()) {
-        lazyHitList.set(index, mIndexSearcher.doc(hitScoreDocs[index].doc));
+      // Ensure list is large enough
+      while (lazyHitList.size() <= index) {
+        lazyHitList.add(null);
       }
+      
+      Document currDoc = lazyHitList.get(index);
+      // The document is null, so it hasn't been loaded yet. Load it now
+      if (currDoc == null) {
+        currDoc = mIndexSearcher.doc(hitScoreDocs[index].doc);
+        lazyHitList.set(index, currDoc);
+      }
+      return currDoc;
     } catch (Exception ex) {
       throw new RegainException("Error while accessing index", ex);
     }
-    return (Document) lazyHitList.get(index);
 
   }
 
@@ -459,7 +468,6 @@ public class SearchResultsImpl implements SearchResults {
    * @return the score of one hit.
    *
    * @throws RegainException If getting the score failed.
-   * @see Hits#score(int)
    */
   @Override
   public float getHitScore(int index) throws RegainException {
@@ -580,8 +588,8 @@ public class SearchResultsImpl implements SearchResults {
       String resSummary = RegainToolkit.createSummaryFromContent(text, 200);
       document.removeField("summary");
       if (resSummary != null) {
-        document.add(new Field("summary", resSummary, Field.Store.NO, Field.Index.NOT_ANALYZED));
-        document.add(new Field("summary", CompressionTools.compressString(resSummary)));
+        document.add(new StringField("summary", resSummary, Field.Store.NO));
+        document.add(new StoredField("summary", CompressionTools.compressString(resSummary)));
         // write back the transformed document
         setHitDocument(index, document);
       }
@@ -628,8 +636,8 @@ public class SearchResultsImpl implements SearchResults {
         document.removeField("summary");
         if (resSummary != null) {
           //System.out.println("resSummary " + resSummary);
-          document.add(new Field("summary", resSummary, Field.Store.NO, Field.Index.NOT_ANALYZED));
-          document.add(new Field("summary", CompressionTools.compressString(resSummary)));
+          document.add(new StringField("summary", resSummary, Field.Store.NO));
+          document.add(new StoredField("summary", CompressionTools.compressString(resSummary)));
 
         }
 
@@ -646,8 +654,8 @@ public class SearchResultsImpl implements SearchResults {
         if (resHighlSummary != null) {
           //System.out.println("Highlighted summary: " + resHighlSummary);
           // write the result back to the document in a new field
-          document.add(new Field("highlightedSummary", resHighlSummary, Field.Store.NO, Field.Index.NOT_ANALYZED));
-          document.add(new Field("highlightedSummary", CompressionTools.compressString(resHighlSummary)));
+          document.add(new StringField("highlightedSummary", resHighlSummary, Field.Store.NO));
+          document.add(new StoredField("highlightedSummary", CompressionTools.compressString(resHighlSummary)));
         }
       }
       // Highlight the title
@@ -663,8 +671,7 @@ public class SearchResultsImpl implements SearchResults {
       if (resHighlTitle != null) {
         // write the result back to the document in a new field
         //System.out.println("Highlighted title: " + resHighlTitle);
-        document.add(new Field("highlightedTitle", resHighlTitle,
-                Field.Store.YES, Field.Index.NOT_ANALYZED));
+        document.add(new StringField("highlightedTitle", resHighlTitle, Field.Store.YES));
 
       }
       // write back the transformed document

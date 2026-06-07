@@ -42,7 +42,7 @@ public class PreparatorConfig implements Iterable<Map.Entry<String, Map<String, 
   /**
    * The sections of this config.<br>
    * String: The name of the section<br>
-   * Map<String,String>: The key-value-pairs of the section.
+   * {@code Map<String,String>}: The key-value-pairs of the section.
    * <p>
    * We use no HashMap here, because two sections may have the same name.
    */
@@ -107,13 +107,13 @@ public class PreparatorConfig implements Iterable<Map.Entry<String, Map<String, 
    *
    * Usage:
    *
-   * <code>
+   * <pre>{@code
    * for (Map.Entry<String, Map<String, String>> section : config)
    * {
    *    String sectionName = section.getEntry();
    *    Map<String,Strin> params = section.getValue();
    * }
-   * </code>
+   * }</pre>
    */
   public Iterator<Entry<String, Map<String, String>>> iterator()
   {

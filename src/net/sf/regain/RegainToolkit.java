@@ -58,17 +58,23 @@ import java.util.StringTokenizer;
 import jcifs.smb.SmbFile;
 import net.sf.regain.util.io.PathFilenamePair;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.AnalyzerWrapper;
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.WhitespaceAnalyzer;
+import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.analysis.de.GermanAnalyzer;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.fr.FrenchAnalyzer;
 import org.apache.lucene.analysis.it.ItalianAnalyzer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.MultiTerms;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermEnum;
-import org.apache.lucene.util.Version;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.BytesRef;
+
 
 /**
  * Enthält Hilfsmethoden, die sowohl vom Crawler als auch von der Suchmaske
@@ -99,14 +105,6 @@ public class RegainToolkit {
   private static String mSystemDefaultEncoding;
   /** Der gecachte, systemspeziefische Zeilenumbruch. */
   private static String mLineSeparator;
-  /** The current version matching to the embedded lucene jars. */
-  private static final Version LUCENE_VERSION = Version.LUCENE_36;
-
-
-
-  public static Version getLuceneVersion() {
-    return LUCENE_VERSION;
-  }
 
   /**
    * Löscht ein Verzeichnis mit allen Unterverzeichnissen und -dateien.
@@ -542,15 +540,21 @@ public class RegainToolkit {
     // Read the terms
     if (!fieldsToReadSet.isEmpty()) {
       try {
-        TermEnum termEnum = indexReader.terms();
-        while (termEnum.next()) {
-          Term term = termEnum.term();
-          String field = term.field();
-
-          ArrayList<String> valueList = fieldsToReadSet.get(field);
-          if (valueList != null) {
-            // This is a value of a wanted field
-            valueList.add(term.text());
+        FieldInfos fieldInfos = FieldInfos.getMergedFieldInfos(indexReader);
+        if (fieldInfos != null) {
+          for (FieldInfo fi : fieldInfos) {
+            String field = fi.name;
+            ArrayList<String> valueList = fieldsToReadSet.get(field);
+            if (valueList != null) {
+              Terms terms = MultiTerms.getTerms(indexReader, field);
+              if (terms != null) {
+                TermsEnum termsEnum = terms.iterator();
+                BytesRef term;
+                while ((term = termsEnum.next()) != null) {
+                  valueList.add(term.utf8ToString());
+                }
+              }
+            }
           }
         }
       } catch (IOException exc) {
@@ -634,34 +638,30 @@ public class RegainToolkit {
     // Create an instance
     Analyzer analyzer;
     if ((stopWordList != null) && (stopWordList.length != 0)) {
-      // Copy
+      // Try constructor with CharArraySet (Lucene 8.x)
       Constructor<?> ctor;
       try {
         ctor = analyzerClass.getConstructor(
-                new Class[]{Version.class, Set.class});
+                new Class[]{Set.class});
+        analyzer = (Analyzer) ctor.newInstance(new Object[]{stopWordSet});
       } catch (Throwable thr) {
         throw new RegainException("Analyzer " + analyzerType
                 + " does not support stop words", thr);
       }
-      try {
-        analyzer = (Analyzer) ctor.newInstance(new Object[]{getLuceneVersion(), stopWordSet});
-      } catch (Throwable thr) {
-        throw new RegainException("Creating analyzer instance failed", thr);
-      }
 
     } else {
-      // instantiate analyser whitout stopwords.
+      // instantiate analyser without stopwords.
       try {
         Constructor<?> analyzerWithoutStopWords;
         try {
           analyzerWithoutStopWords = analyzerClass.getConstructor(
-                  new Class[]{Version.class});
+                  new Class[]{});
         } catch (Throwable thr) {
           throw new RegainException("Analyzer " + analyzerType
                   + " is not supported.", thr);
         }
 
-        analyzer = (Analyzer) analyzerWithoutStopWords.newInstance(new Object[]{getLuceneVersion()});
+        analyzer = (Analyzer) analyzerWithoutStopWords.newInstance(new Object[]{});
       } catch (Throwable thr) {
         throw new RegainException("Creating analyzer instance failed", thr);
       }
@@ -706,42 +706,7 @@ public class RegainToolkit {
    *         analysiert.
    */
   private static Analyzer createAnalysingAnalyzer(final Analyzer nestedAnalyzer) {
-    return new Analyzer() {
-
-      @Override
-      public TokenStream tokenStream(String fieldName, Reader reader) {
-        // NOTE: For Analyzation we have to read the reader twice:
-        //       Once for the analyzation and second for the returned TokenStream
-        //       -> We save the content of the Reader in a String and read this
-        //          String twice.
-        //       -> Old behaviour!
-        try {
-          // Save the content of the reader in a String
-          StringWriter writer = new java.io.StringWriter();
-          pipe(reader, writer);
-          String asString = writer.toString();
-
-          // Analyze the call
-          TokenStream stream = nestedAnalyzer.tokenStream(fieldName,
-                  new StringReader(asString));
-          CharTermAttribute termAtt = stream.addAttribute(CharTermAttribute.class);
-
-          System.out.println("Tokens for '" + asString + "':");
-          while (stream.incrementToken()) {
-            System.out.println(" '" + termAtt.toString() + "'");
-          }
-          stream.reset();
-          return stream;
-          // Do the call a second time and return the result this time
-          // Old behaviour
-          // return nestedAnalyzer.tokenStream(fieldName, new StringReader(asString));
-        } catch (IOException exc) {
-          System.out.println("exc: " + exc);
-
-          return null;
-        }
-      }
-    };
+    return nestedAnalyzer;
   }
 
   /**
@@ -1304,7 +1269,7 @@ public class RegainToolkit {
    *
    * @param url The URL to extract the file name from.
    * @return The file name that matches the URL.
-   * @throws RegainException.
+   * @throws RegainException
    */
   public static String urlToWhitespacedFileName(String url) throws RegainException {
 
@@ -1571,11 +1536,12 @@ public class RegainToolkit {
 
   // inner class WrapperAnalyzer
   /**
-   * An analyzer that changes a document in lowercase before delivering
-   * it to a nested analyzer. For the field "groups" an analyzer is used that
-   * only tokenizes the input without stemming the tokens.
+   * Ein Analyzer, der den Text aller Felder in Kleinschreibung umwandelt, bevor
+   * er an einen verschachtelten Analyzer übergeben wird. Für das Feld "groups"
+   * und alle untokenisierten Felder wird ein Analyzer verwendet, der die
+   * Eingabe nur tokenisiert, ohne sie zu verändern.
    */
-  private static class WrapperAnalyzer extends Analyzer {
+  private static class WrapperAnalyzer extends AnalyzerWrapper {
 
     /** The analyzer to use for a field that shouldn't be stemmed. */
     private Analyzer mNoStemmingAnalyzer;
@@ -1592,7 +1558,8 @@ public class RegainToolkit {
      *        tokenized.
      */
     public WrapperAnalyzer(Analyzer nestedAnalyzer, String[] untokenizedFieldNames) {
-      mNoStemmingAnalyzer = new WhitespaceAnalyzer(getLuceneVersion());
+      super(Analyzer.PER_FIELD_REUSE_STRATEGY);
+      mNoStemmingAnalyzer = new WhitespaceAnalyzer();
       mNestedAnalyzer = nestedAnalyzer;
 
       mUntokenizedFieldNames = new HashSet<String>();
@@ -1600,11 +1567,10 @@ public class RegainToolkit {
     }
 
     /**
-     * Creates a TokenStream which tokenizes all the text in the provided
-     * Reader.
+     * Gets the analyzer to use for the given field.
      */
     @Override
-    public TokenStream tokenStream(String fieldName, Reader reader) {
+    protected Analyzer getWrappedAnalyzer(String fieldName) {
       boolean useStemming = true;
       // NOTE: For security reasons we explicitely check for the groups field
       //       and don't use the mUntokenizedFieldNames for this implicitely
@@ -1613,10 +1579,21 @@ public class RegainToolkit {
       }
 
       if (useStemming) {
-        Reader lowercasingReader = new LowercasingReader(reader);
-        return mNestedAnalyzer.tokenStream(fieldName, lowercasingReader);
+        return mNestedAnalyzer;
       } else {
-        return mNoStemmingAnalyzer.tokenStream(fieldName, reader);
+        return mNoStemmingAnalyzer;
+      }
+    }
+
+    /**
+     * Lowercases the text before it reaches the nested analyzer.
+     */
+    @Override
+    protected Reader wrapReader(String fieldName, Reader reader) {
+      if (getWrappedAnalyzer(fieldName) == mNestedAnalyzer) {
+        return new LowercasingReader(reader);
+      } else {
+        return reader;
       }
     }
   } // inner class WrapperAnalyzer

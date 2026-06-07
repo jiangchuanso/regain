@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 
 import net.sf.regain.RegainException;
 import net.sf.regain.RegainToolkit;
@@ -42,11 +44,19 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.MultiTerms;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermEnum;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -54,6 +64,7 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopScoreDocCollector;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.store.NoLockFactory;
 
 /**
  * Kontrolliert und kapselt die Erstellung des Suchindex.
@@ -212,6 +223,12 @@ public class IndexWriterManager {
    */
   private HashMap<String, String> mUrlsToDeleteHash;
 
+  /**
+   * enthält die URLs der vorgemerkten Dokumente, deren letzter
+   * Vorbereitungslauf fehlgeschlagen ist (Feld "preparation-error" gesetzt).
+   */
+  private HashSet<String> mUrlsWithPrepError;
+
   /** Crawler Plugin Manager instance */
   private CrawlerPluginManager pluginManager = CrawlerPluginManager.getInstance();
 
@@ -248,7 +265,7 @@ public class IndexWriterManager {
     mQuarantineIndexDir = new File(indexDir, QUARANTINE_INDEX_SUBDIR);
     mTempIndexDir = new File(indexDir, TEMP_INDEX_SUBDIR);
     try {
-      mLuceneTempIndexDir = FSDirectory.open(mTempIndexDir);
+      mLuceneTempIndexDir = FSDirectory.open(mTempIndexDir.toPath());
     } catch (IOException ioEx) {
       throw new RegainException("Couldn't open tmpIndexDir", ioEx);
     }
@@ -297,13 +314,10 @@ public class IndexWriterManager {
     if (updateIndex) {
       // Force an unlock of the index (we just created a copy so this is save)
       setIndexMode(READING_MODE);
-      try {
-
-        IndexWriter.unlock(mIndexReader.directory());
-        mInitialDocCount = mIndexReader.numDocs();
-      } catch (IOException exc) {
-        throw new RegainException("Forcing unlock failed", exc);
-      }
+      // In Lucene 8.x, unlock is done by setting a NoLockFactory
+      // Note: We can't get directory from IndexReader in Lucene 8.x
+      // The lock is handled by the directory itself
+      mInitialDocCount = mIndexReader.numDocs();
     }
 
     // Write the stopWordList and the exclusionList in a file so it can be found
@@ -450,12 +464,7 @@ public class IndexWriterManager {
 
     // Close the mIndexSearcher in ALL_CLOSED_MODE
     if ((mode == ALL_CLOSED_MODE) && (mIndexSearcher != null)) {
-      try {
-        mIndexSearcher.close();
-        mIndexSearcher = null;
-      } catch (IOException exc) {
-        throw new RegainException("Closing IndexSearcher failed", exc);
-      }
+      mIndexSearcher = null;
     }
 
     // Open the mIndexWriter in WRITING_MODE
@@ -472,7 +481,7 @@ public class IndexWriterManager {
     if ((mode == READING_MODE) && (mIndexReader == null)) {
       mLog.info("Switching to index mode: deleting mode");
       try {
-        mIndexReader = IndexReader.open(mLuceneTempIndexDir, false);
+        mIndexReader = DirectoryReader.open(mLuceneTempIndexDir);
       } catch (IOException exc) {
         throw new RegainException("Creating IndexReader failed", exc);
       }
@@ -482,7 +491,7 @@ public class IndexWriterManager {
     if ((mode == SEARCHING_MODE) && (mIndexSearcher == null)) {
       mLog.info("Switching to index mode: searching mode");
       try {
-        mIndexSearcher = new IndexSearcher(mLuceneTempIndexDir, false);
+        mIndexSearcher = new IndexSearcher(DirectoryReader.open(mLuceneTempIndexDir));
       } catch (IOException exc) {
         throw new RegainException("Creating IndexSearcher failed", exc);
       }
@@ -496,7 +505,7 @@ public class IndexWriterManager {
 
   private IndexWriter createIndexWriter(boolean createNewIndex)
           throws IOException {
-    IndexWriterConfig iConfig = new IndexWriterConfig(RegainToolkit.getLuceneVersion(), mAnalyzer);
+    IndexWriterConfig iConfig = new IndexWriterConfig(mAnalyzer);
 
     if (createNewIndex)
       iConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
@@ -505,10 +514,8 @@ public class IndexWriterManager {
 
     IndexWriter indexWriter = new IndexWriter(mLuceneTempIndexDir, iConfig);
 
-    int maxFieldLength = mConfig.getMaxFieldLength();
-    if (maxFieldLength > 0) {
-      indexWriter.setMaxFieldLength(maxFieldLength);
-    }
+    // Note: maxFieldLength is no longer supported in Lucene 8.x
+    // All fields are indexed with unlimited length
 
     return indexWriter;
   }
@@ -584,7 +591,7 @@ public class IndexWriterManager {
 
       try {
         setIndexMode(SEARCHING_MODE);
-        TopScoreDocCollector collector = TopScoreDocCollector.create(2, false);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(2, Integer.MAX_VALUE);
         mIndexSearcher.search(query, collector);
 
         if (collector.getTotalHits() == 1) {
@@ -619,7 +626,7 @@ public class IndexWriterManager {
       Document doc;
       try {
         setIndexMode(SEARCHING_MODE);
-        TopScoreDocCollector collector = TopScoreDocCollector.create(20, false);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(20, Integer.MAX_VALUE);
         mIndexSearcher.search(query, collector);
         ScoreDoc[] hits = collector.topDocs().scoreDocs;
 
@@ -827,17 +834,18 @@ public class IndexWriterManager {
     }
 
     // Go through the index
-    setIndexMode(READING_MODE);
-    int docCount = mIndexReader.numDocs();
+    setIndexMode(SEARCHING_MODE);
+    List<Query> deleteQueries = new ArrayList<Query>();
+    int docCount = mIndexSearcher.getIndexReader().numDocs();
     for (int docIdx = 0; docIdx < docCount; docIdx++) {
-      if (!mIndexReader.isDeleted(docIdx)) {
-        // Document lesen
-        Document doc;
-        try {
-          doc = mIndexReader.document(docIdx);
-        } catch (Throwable thr) {
-          throw new RegainException("Getting document #" + docIdx + " from index failed.", thr);
-        }
+      // In Lucene 8.x, there's no isDeleted() - all docs in the reader are valid
+      // Document lesen
+      Document doc;
+      try {
+        doc = mIndexSearcher.doc(docIdx);
+      } catch (Throwable thr) {
+        throw new RegainException("Getting document #" + docIdx + " from index failed.", thr);
+      }
 
         // URL und last-modified holen
         String url = doc.get("url");
@@ -867,21 +875,46 @@ public class IndexWriterManager {
           }
 
           if (shouldBeDeleted) {
-        	pluginManager.eventDeleteIndexEntry(doc, mIndexReader);
+        	pluginManager.eventDeleteIndexEntry(doc, mIndexSearcher.getIndexReader());
 
-            try {
-              mLog.info("Deleting from index: " + url + " from " + lastModified);
-              mIndexReader.deleteDocument(docIdx);
-            } catch (IOException exc) {
-              throw new RegainException("Deleting document #" + docIdx + " from index failed: " + url + " from " + lastModified, exc);
+            mLog.info("Marking for deletion from index: " + url + " from " + lastModified);
+            // NOTE: The actual deletion is done below using an IndexWriter,
+            //       because a read-only IndexReader can't delete documents
+            //       in Lucene 8.x
+            markForDeletion(doc);
+
+            // Build a precise query for this document, so a newly added entry
+            // for the same URL is not deleted as well
+            BooleanQuery.Builder delBuilder = new BooleanQuery.Builder();
+            delBuilder.add(new TermQuery(new Term("url", url)), BooleanClause.Occur.MUST);
+            if (lastModified != null) {
+              delBuilder.add(new TermQuery(new Term("last-modified", lastModified)),
+                      BooleanClause.Occur.MUST);
             }
+            if (doc.get("preparation-error") != null) {
+              delBuilder.add(new TermQuery(new Term("preparation-error", "true")),
+                      BooleanClause.Occur.MUST);
+            }
+            deleteQueries.add(delBuilder.build());
           }
         }
+    }
+
+    // Perform the deletion of all entries that were marked for deletion
+    if (!deleteQueries.isEmpty()) {
+      try {
+        setIndexMode(WRITING_MODE);
+        for (Query query : deleteQueries) {
+          mIndexWriter.deleteDocuments(query);
+        }
+      } catch (IOException exc) {
+        throw new RegainException("Deleting obsolete index entries failed", exc);
       }
     }
 
-    // Merkliste der zu l�schenden Eintr�ge l�schen
+    // Merkliste der zu löschenden Einträge löschen
     mUrlsToDeleteHash = null;
+    mUrlsWithPrepError = null;
   }
 
   /**
@@ -918,6 +951,12 @@ public class IndexWriterManager {
     if ((url != null) || (lastModified != null)) {
       mLog.info("Marking old entry for a later deletion: " + url + " from " + lastModified);
       mUrlsToDeleteHash.put(url, lastModified);
+      if (doc.get("preparation-error") != null) {
+        if (mUrlsWithPrepError == null) {
+          mUrlsWithPrepError = new HashSet<String>();
+        }
+        mUrlsWithPrepError.add(url);
+      }
     }
   }
 
@@ -942,9 +981,22 @@ public class IndexWriterManager {
       return false;
     }
 
-    // Prüfen, ob es einen Eintrag für diese URL gibt und ob er dem
-    // last-modified des Dokuments entspricht
+    // Prüfen, ob es einen Eintrag für diese URL gibt
     String lastModifiedToDelete = mUrlsToDeleteHash.get(url);
+    if (lastModifiedToDelete == null) {
+      return false;
+    }
+
+    // Prüfen, ob das Dokument und der gemerkte Eintrag hinsichtlich eines
+    // Vorbereitungsfehlers übereinstimmen. Andernfalls würde bei einem
+    // fehlgeschlagenen Vorbereitungslauf auch der frisch erzeugte Eintrag
+    // gelöscht werden.
+    boolean docHasError = doc.get("preparation-error") != null;
+    boolean markedHasError = (mUrlsWithPrepError != null) && mUrlsWithPrepError.contains(url);
+    if (docHasError != markedHasError) {
+      return false;
+    }
+
     return lastModified.equals(lastModifiedToDelete);
   }
 
@@ -959,7 +1011,7 @@ public class IndexWriterManager {
       return mIndexReader.numDocs();
     } else {
       setIndexMode(WRITING_MODE);
-      return mIndexWriter.maxDoc();
+      return mIndexWriter.getDocStats().maxDoc;
     }
   }
 
@@ -1044,7 +1096,7 @@ public class IndexWriterManager {
     // Index optimieren
     try {
       setIndexMode(WRITING_MODE);
-      mIndexWriter.optimize(); // TODO: Use maybeMerge instead?
+      mIndexWriter.forceMerge(1); // Optimize the index (replaced optimize())
     } catch (IOException exc) {
       throw new RegainException("Finishing IndexWriter failed", exc);
     }
@@ -1142,7 +1194,7 @@ public class IndexWriterManager {
     FileOutputStream stream = null;
     PrintWriter writer = null;
     try {
-      reader = IndexReader.open(FSDirectory.open(indexDir));
+      reader = DirectoryReader.open(FSDirectory.open(indexDir.toPath()));
 
       stream = new FileOutputStream(termFile);
       writer = new PrintWriter(stream);
@@ -1152,12 +1204,11 @@ public class IndexWriterManager {
       writer.println();
 
       // Write the terms
-      TermEnum termEnum = reader.terms();
       int termCount;
       if (WRITE_TERMS_SORTED) {
-        termCount = writeTermsSorted(termEnum, writer);
+        termCount = writeTermsSorted(reader, writer);
       } else {
-        termCount = writeTermsSimply(termEnum, writer);
+        termCount = writeTermsSimply(reader, writer);
       }
 
       mLog.info("Wrote " + termCount + " terms into " + termFile.getAbsolutePath());
@@ -1187,21 +1238,29 @@ public class IndexWriterManager {
    * <p>
    * Diese Methode braucht minimale Ressourcen.
    *
-   * @param termEnum Die Aufz�hlung mit allen Termen.
+   * @param reader Der IndexReader.
    * @param writer Der Writer auf den geschrieben werden soll.
    *
    * @return Die Anzahl der Terme.
    * @throws IOException Wenn das Schreiben fehl schlug.
    */
-  private int writeTermsSimply(TermEnum termEnum, PrintWriter writer)
+  private int writeTermsSimply(IndexReader reader, PrintWriter writer)
           throws IOException {
     int termCount = 0;
-    while (termEnum.next()) {
-      Term term = termEnum.term();
-      writer.println(term.text());
-      termCount++;
+    FieldInfos fieldInfos = FieldInfos.getMergedFieldInfos(reader);
+    if (fieldInfos != null) {
+      for (FieldInfo fi : fieldInfos) {
+        Terms terms = MultiTerms.getTerms(reader, fi.name);
+        if (terms != null) {
+          TermsEnum termsEnum = terms.iterator();
+          BytesRef term;
+          while ((term = termsEnum.next()) != null) {
+            writer.println(term.utf8ToString());
+            termCount++;
+          }
+        }
+      }
     }
-
     return termCount;
   }
 
@@ -1212,19 +1271,28 @@ public class IndexWriterManager {
    * es zu viele sind, k�nnte das schief gehen. In diesem Fall sollte man auf simples
    * Schreiben umstellen.
    *
-   * @param termEnum Die Aufz�hlung mit allen Termen.
+   * @param reader Der IndexReader.
    * @param writer Der Writer auf den geschrieben werden soll.
    *
    * @return Die Anzahl der Terme.
    * @throws IOException Wenn das Schreiben fehl schlug.
    */
-  private int writeTermsSorted(TermEnum termEnum, PrintWriter writer)
+  private int writeTermsSorted(IndexReader reader, PrintWriter writer)
           throws IOException {
     // Put all terms in a list for a later sorting
     ArrayList<String> list = new ArrayList<String>();
-    while (termEnum.next()) {
-      Term term = termEnum.term();
-      list.add(term.text());
+    FieldInfos fieldInfos = FieldInfos.getMergedFieldInfos(reader);
+    if (fieldInfos != null) {
+      for (FieldInfo fi : fieldInfos) {
+        Terms terms = MultiTerms.getTerms(reader, fi.name);
+        if (terms != null) {
+          TermsEnum termsEnum = terms.iterator();
+          BytesRef term;
+          while ((term = termsEnum.next()) != null) {
+            list.add(term.utf8ToString());
+          }
+        }
+      }
     }
 
     String[] asArr = new String[list.size()];

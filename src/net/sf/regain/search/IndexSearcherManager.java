@@ -115,7 +115,7 @@ public class IndexSearcherManager implements Closeable {
 
     try
     {
-      mSearcherManager = new SearcherManager(FSDirectory.open(mWorkingIndexDir), new SearcherFactory());
+      mSearcherManager = new SearcherManager(FSDirectory.open(mWorkingIndexDir.toPath()), new SearcherFactory());
     }
     catch (IOException e)
     {
@@ -353,7 +353,11 @@ public class IndexSearcherManager implements Closeable {
    */
   public IndexSearcher getIndexSearcher() throws RegainException {
     ensureIndexDirExists();
-    return mSearcherManager.acquire();
+    try {
+      return mSearcherManager.acquire();
+    } catch (IOException ex) {
+      throw new RegainException("Error acquiring index searcher", ex);
+    }
   }
 
   /**

@@ -64,7 +64,6 @@ public interface SearchResults {
    * @return the score of one hit.
    *
    * @throws RegainException If getting the score failed.
-   * @see Hits#score(int)
    */
   public float getHitScore(int index) throws RegainException;
 
@@ -121,7 +120,6 @@ public interface SearchResults {
    * Highlights fields in the document.
    *
    * @param index The index of the hit.
-   * @return the document of one hit.
    *
    * @throws RegainException If highlighting failed.
    * @see Document

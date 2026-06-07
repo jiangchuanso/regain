@@ -5,24 +5,22 @@ import java.io.OutputStream;
 import junit.framework.TestCase;
 import net.sf.regain.RegainException;
 import net.sf.regain.util.sharedtag.PageResponse;
+import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
 public class XmlEscapingTest extends TestCase
 {
-  protected static Logger mLog = Logger.getLogger(CrawlerPluginTest.class);
-  private static final String LOG4J_CONFIG_FILE = "projekte/regain/test/log4j.properties";
+  protected static Logger mLog = Logger.getLogger(XmlEscapingTest.class);
+  private static final String LOG4J_CONFIG_FILE = "test/log4j.properties";
 
   static {
-    System.setProperty("log4j.configuration", LOG4J_CONFIG_FILE);
-
     File logConfigFile = new File(LOG4J_CONFIG_FILE);
-    if (!logConfigFile.exists()) {
-      System.out.println("ERROR: Logging configuration file not found: " + logConfigFile.getAbsolutePath());
-      System.exit(1); // Abort
+    if (logConfigFile.exists()) {
+      PropertyConfigurator.configureAndWatch(logConfigFile.getAbsolutePath(), 10 * 1000);
+    } else {
+      BasicConfigurator.configure();
     }
-
-    PropertyConfigurator.configureAndWatch(logConfigFile.getAbsolutePath(), 10 * 1000);
   }
 
   private PseudoPageResponse resp;

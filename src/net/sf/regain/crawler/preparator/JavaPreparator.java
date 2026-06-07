@@ -133,7 +133,7 @@ public class JavaPreparator extends AbstractPreparator {
   /**
    * Extract constants info from Enums.
    *
-   * @param the enum to examine
+   * @param cls the enum to examine
    * @return the result as a StringBuffer
    */
   private StringBuffer extractEnumInfo(JClassEnum cls) {
@@ -151,7 +151,7 @@ public class JavaPreparator extends AbstractPreparator {
   /**
    * Extract method details for the class.
    *
-   * @param the class to examine
+   * @param cls the class to examine
    *
    * @return the result as a StringBuffer
    */

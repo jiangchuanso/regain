@@ -54,7 +54,7 @@ public class FilesizeFilterPlugin extends AbstractCrawlerPlugin
   private boolean pluginEnabled = false;
 
   /**
-   * Get&parse parameters of plugin.
+   * Get{@literal &}parse parameters of plugin.
    */
   @Override
   public void init(PreparatorConfig config) throws RegainException {
