@@ -47,10 +47,14 @@ import net.sf.regain.util.io.PathFilenamePair;
 
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.core.WhitespaceTokenizer;
-import org.apache.lucene.document.CompressionTools;
+import net.sf.regain.util.CompressionTools;
+import net.sf.regain.util.FieldHelper;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
 import org.apache.regexp.RE;
 import org.apache.regexp.RESyntaxException;
 import org.ontoware.rdf2go.model.node.impl.URIImpl;
@@ -444,9 +448,7 @@ public class DocumentFactory {
             boolean index = auxiliaryField.isIndexed();
             boolean token = auxiliaryField.isTokenized();
 
-            doc.add(new Field(targetFieldName, value,
-                    store ? Field.Store.YES : Field.Store.NO,
-                    index ? (token ? Field.Index.ANALYZED : Field.Index.NOT_ANALYZED) : Field.Index.NO));
+            doc.add(new TextField(targetFieldName, value, store ? Field.Store.YES : Field.Store.NO));
           }
         }
       }
@@ -470,34 +472,33 @@ public class DocumentFactory {
       }
 
       //doc.add(new Field(RegainToolkit.FIELD_ACCESS_CONTROL_GROUPS, new IteratorTokenStream(groupIter)));
-      doc.add(new Field(RegainToolkit.FIELD_ACCESS_CONTROL_GROUPS, new WhitespaceTokenizer(RegainToolkit.getLuceneVersion(),
-              new StringReader(tokenBuilder.toString()))));
+      doc.add(new TextField(RegainToolkit.FIELD_ACCESS_CONTROL_GROUPS, tokenBuilder.toString(), Field.Store.NO));
     }
 
     // Add the URL of the document
     if (url == null)
       url = "";
-    doc.add(new Field("url", url, Field.Store.YES, Field.Index.NOT_ANALYZED));
+    doc.add(new StringField("url", url, Field.Store.YES));
 
     // Add the file name (without protocol, drive-letter and path)
     String filenameWithVariants = RegainToolkit.urlToWhitespacedFileName(url);
 //    doc.add(new Field("filename", new WhitespaceTokenizer(IndexConfig.getLuceneVersion(),
 //            new StringReader(filenameWithVariants))));
-    doc.add(new Field("filename", filenameWithVariants, Field.Store.YES, Field.Index.ANALYZED));
+    doc.add(new TextField("filename", filenameWithVariants, Field.Store.YES));
 
     // Add the filename field for sorting
     PathFilenamePair pfPair = RegainToolkit.fragmentUrl(url);
-    doc.add(new Field("filename_sort", pfPair.getFilename(), Field.Store.YES, Field.Index.NOT_ANALYZED));
+    doc.add(new StringField("filename_sort", pfPair.getFilename(), Field.Store.YES));
 
     // Add the document's size
     int size = rawDocument.getLength();
-    doc.add(new Field("size", Integer.toString(size), Field.Store.YES, Field.Index.NOT_ANALYZED));
+    doc.add(new StringField("size", Integer.toString(size), Field.Store.YES));
 
     // Add the mime-type
     String mimeType = rawDocument.getMimeType();
     if (mimeType == null)
       mimeType = MIME_TYPE_UNKNOWN;
-    doc.add(new Field("mimetype", mimeType, Field.Store.YES, Field.Index.NOT_ANALYZED));
+    doc.add(new StringField("mimetype", mimeType, Field.Store.YES));
 
     // Add last modified
     Date lastModified = rawDocument.getLastModified();
@@ -506,9 +507,8 @@ public class DocumentFactory {
       // -> Take the current time
       lastModified = new Date();
     }
-    doc.add(new Field("last-modified",
-            DateTools.dateToString(lastModified, DateTools.Resolution.DAY), Field.Store.YES,
-            Field.Index.NOT_ANALYZED));
+    doc.add(new StringField("last-modified",
+            DateTools.dateToString(lastModified, DateTools.Resolution.DAY), Field.Store.YES));
 
     // Write the raw content to an analysis file
     writeContentAnalysisFile(rawDocument);
@@ -521,8 +521,8 @@ public class DocumentFactory {
         //doc.add(new Field(fieldName, fieldValue, Field.Store.COMPRESS, Field.Index.ANALYZED));
         // DEBUG doc.add(new Field(fieldName, fieldValue, Field.Store.YES, Field.Index.ANALYZED));
 
-        doc.add(new Field(fieldName, fieldValue, Field.Store.NO, Field.Index.ANALYZED));
-        doc.add(new Field(fieldName, CompressionTools.compressString(fieldValue)));
+        doc.add(new TextField(fieldName, fieldValue, Field.Store.NO));
+        doc.add(new StoredField(fieldName, CompressionTools.compressString(fieldValue)));
       }
     }
 
@@ -531,13 +531,12 @@ public class DocumentFactory {
       writeAnalysisFile(url, "clean", cleanedContent);
 
       // Add the cleaned content of the document
-      doc.add(new Field("content", cleanedContent,
-              this.storeContentForPreview ? Field.Store.YES : Field.Store.NO, Field.Index.ANALYZED));
+      doc.add(new TextField("content", cleanedContent,
+              this.storeContentForPreview ? Field.Store.YES : Field.Store.NO));
     } else {
       // We have no content! This is a substitute document
       // -> Add a "preparation-error"-field
-      doc.add(new Field("preparation-error", "true", Field.Store.YES,
-              Field.Index.NO));
+      doc.add(new StringField("preparation-error", "true", Field.Store.YES));
     }
 
     // Check whether to use the link text as title
@@ -553,10 +552,10 @@ public class DocumentFactory {
 
     // Add the document's title
     if (hasContent(title)) {
-      doc.add(new Field("title", title, Field.Store.YES, Field.Index.ANALYZED));
-      doc.add(new Field("title_sort", title.toLowerCase(), Field.Store.YES, Field.Index.NOT_ANALYZED));
+      doc.add(new TextField("title", title, Field.Store.YES));
+      doc.add(new StringField("title_sort", title.toLowerCase(), Field.Store.YES));
     } else {
-      doc.add(new Field("title_sort", "", Field.Store.YES, Field.Index.NOT_ANALYZED));
+      doc.add(new StringField("title_sort", "", Field.Store.YES));
     }
 
     // Add the document's summary
@@ -564,31 +563,30 @@ public class DocumentFactory {
       summary = createSummaryFromContent(cleanedContent);
     }
     if (hasContent(summary)) {
-      doc.add(new Field("summary", summary, Field.Store.NO, Field.Index.ANALYZED));
-      doc.add(new Field("summary", CompressionTools.compressString(summary)));
+      doc.add(new TextField("summary", summary, Field.Store.NO));
+      doc.add(new StoredField("summary", CompressionTools.compressString(summary)));
     }
 
     // Add the document's metadata
     if (hasContent(metadata)) {
-      doc.add(new Field("metadata", metadata, Field.Store.YES, Field.Index.ANALYZED));
+      doc.add(new TextField("metadata", metadata, Field.Store.YES));
     }
 
     // Add the document's headlines
     if (hasContent(headlines)) {
-      doc.add(new Field("headlines", headlines, Field.Store.NO,
-              Field.Index.ANALYZED));
+      doc.add(new TextField("headlines", headlines, Field.Store.NO));
     }
 
     // Add the document's path
     if (pfPair.getPath() != null) {
       //String asString = pathToString(path);
-      doc.add(new Field("path", pfPair.getPath(), Field.Store.YES, Field.Index.NO));
-      doc.add(new Field("path_sort", pfPair.getPath().toLowerCase(), Field.Store.YES, Field.Index.NOT_ANALYZED));
+      doc.add(new StoredField("path", pfPair.getPath()));
+      doc.add(new StringField("path_sort", pfPair.getPath().toLowerCase(), Field.Store.YES));
 
       // Write the path to an analysis file
       writeAnalysisFile(url, "path", pfPair.getPath());
     } else {
-      doc.add(new Field("path_sort", "", Field.Store.YES, Field.Index.NOT_ANALYZED));
+      doc.add(new StringField("path_sort", "", Field.Store.YES));
     }
 
     return doc;

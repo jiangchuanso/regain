@@ -71,7 +71,7 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.Version;
+
 
 /**
  * Enthält Hilfsmethoden, die sowohl vom Crawler als auch von der Suchmaske
@@ -102,14 +102,6 @@ public class RegainToolkit {
   private static String mSystemDefaultEncoding;
   /** Der gecachte, systemspeziefische Zeilenumbruch. */
   private static String mLineSeparator;
-  /** The current version matching to the embedded lucene jars. */
-  private static final Version LUCENE_VERSION = Version.LUCENE_36;
-
-
-
-  public static Version getLuceneVersion() {
-    return LUCENE_VERSION;
-  }
 
   /**
    * Löscht ein Verzeichnis mit allen Unterverzeichnissen und -dateien.
@@ -642,34 +634,30 @@ public class RegainToolkit {
     // Create an instance
     Analyzer analyzer;
     if ((stopWordList != null) && (stopWordList.length != 0)) {
-      // Copy
+      // Try constructor with CharArraySet (Lucene 8.x)
       Constructor<?> ctor;
       try {
         ctor = analyzerClass.getConstructor(
-                new Class[]{Version.class, Set.class});
+                new Class[]{Set.class});
+        analyzer = (Analyzer) ctor.newInstance(new Object[]{stopWordSet});
       } catch (Throwable thr) {
         throw new RegainException("Analyzer " + analyzerType
                 + " does not support stop words", thr);
       }
-      try {
-        analyzer = (Analyzer) ctor.newInstance(new Object[]{getLuceneVersion(), stopWordSet});
-      } catch (Throwable thr) {
-        throw new RegainException("Creating analyzer instance failed", thr);
-      }
 
     } else {
-      // instantiate analyser whitout stopwords.
+      // instantiate analyser without stopwords.
       try {
         Constructor<?> analyzerWithoutStopWords;
         try {
           analyzerWithoutStopWords = analyzerClass.getConstructor(
-                  new Class[]{Version.class});
+                  new Class[]{});
         } catch (Throwable thr) {
           throw new RegainException("Analyzer " + analyzerType
                   + " is not supported.", thr);
         }
 
-        analyzer = (Analyzer) analyzerWithoutStopWords.newInstance(new Object[]{getLuceneVersion()});
+        analyzer = (Analyzer) analyzerWithoutStopWords.newInstance(new Object[]{});
       } catch (Throwable thr) {
         throw new RegainException("Creating analyzer instance failed", thr);
       }
@@ -1600,7 +1588,7 @@ public class RegainToolkit {
      *        tokenized.
      */
     public WrapperAnalyzer(Analyzer nestedAnalyzer, String[] untokenizedFieldNames) {
-      mNoStemmingAnalyzer = new WhitespaceAnalyzer(getLuceneVersion());
+      mNoStemmingAnalyzer = new WhitespaceAnalyzer();
       mNestedAnalyzer = nestedAnalyzer;
 
       mUntokenizedFieldNames = new HashSet<String>();

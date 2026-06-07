@@ -39,9 +39,12 @@ import org.apache.commons.collections.ListUtils;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.document.CompressionTools;
+import net.sf.regain.util.CompressionTools;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.MultiReader;
 import org.apache.lucene.index.Term;
@@ -49,13 +52,11 @@ import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopDocsCollector;
 import org.apache.lucene.search.TopFieldCollector;
 import org.apache.lucene.search.WildcardQuery;
 import org.apache.lucene.search.highlight.Highlighter;
@@ -85,7 +86,7 @@ public class SearchResultsImpl implements SearchResults {
   /** The hits of this search. */
   private ScoreDoc[] hitScoreDocs;
   /** The DocCollector. */
-  private TopDocsCollector<FieldValueHitQueue.Entry> topDocsCollector;
+  private TopFieldCollector topDocsCollector;
 
   private static Pattern mimetypeFieldPattern = Pattern.compile("(mimetype:\"([^:]*)\")");
   private static Pattern negativeMimetypeFieldPattern = Pattern.compile("((-|!|NOT )mimetype:\"([^:]*)\")");
@@ -203,7 +204,7 @@ public class SearchResultsImpl implements SearchResults {
             String[] searchFieldArr = indexConfigs[k].getSearchFieldList();
             for (int i = 0; i < searchFieldArr.length; i++) {
 
-              QueryParser parser = new QueryParser(RegainToolkit.getLuceneVersion(), searchFieldArr[i], mAnalyzer);
+              QueryParser parser = new QueryParser(searchFieldArr[i], mAnalyzer);
               parser.setDefaultOperator(QueryParser.AND_OPERATOR);
               parser.setAllowLeadingWildcard(true);
 
@@ -252,7 +253,7 @@ public class SearchResultsImpl implements SearchResults {
           Sort sort = new Sort(sortingOption.getSortField());
           mLog.debug("Sort by:" + sortingOption.toString());
 
-          topDocsCollector = TopFieldCollector.create(sort, 10000, true, true, true, false);
+          topDocsCollector = TopFieldCollector.create(sort, 10000, Integer.MAX_VALUE);
 
           mIndexSearcher.search(mQuery, topDocsCollector);
           hitScoreDocs = topDocsCollector.topDocs().scoreDocs;
@@ -580,8 +581,8 @@ public class SearchResultsImpl implements SearchResults {
       String resSummary = RegainToolkit.createSummaryFromContent(text, 200);
       document.removeField("summary");
       if (resSummary != null) {
-        document.add(new Field("summary", resSummary, Field.Store.NO, Field.Index.NOT_ANALYZED));
-        document.add(new Field("summary", CompressionTools.compressString(resSummary)));
+        document.add(new StringField("summary", resSummary, Field.Store.NO));
+        document.add(new StoredField("summary", CompressionTools.compressString(resSummary)));
         // write back the transformed document
         setHitDocument(index, document);
       }
@@ -628,8 +629,8 @@ public class SearchResultsImpl implements SearchResults {
         document.removeField("summary");
         if (resSummary != null) {
           //System.out.println("resSummary " + resSummary);
-          document.add(new Field("summary", resSummary, Field.Store.NO, Field.Index.NOT_ANALYZED));
-          document.add(new Field("summary", CompressionTools.compressString(resSummary)));
+          document.add(new StringField("summary", resSummary, Field.Store.NO));
+          document.add(new StoredField("summary", CompressionTools.compressString(resSummary)));
 
         }
 
@@ -646,8 +647,8 @@ public class SearchResultsImpl implements SearchResults {
         if (resHighlSummary != null) {
           //System.out.println("Highlighted summary: " + resHighlSummary);
           // write the result back to the document in a new field
-          document.add(new Field("highlightedSummary", resHighlSummary, Field.Store.NO, Field.Index.NOT_ANALYZED));
-          document.add(new Field("highlightedSummary", CompressionTools.compressString(resHighlSummary)));
+          document.add(new StringField("highlightedSummary", resHighlSummary, Field.Store.NO));
+          document.add(new StoredField("highlightedSummary", CompressionTools.compressString(resHighlSummary)));
         }
       }
       // Highlight the title
@@ -663,8 +664,7 @@ public class SearchResultsImpl implements SearchResults {
       if (resHighlTitle != null) {
         // write the result back to the document in a new field
         //System.out.println("Highlighted title: " + resHighlTitle);
-        document.add(new Field("highlightedTitle", resHighlTitle,
-                Field.Store.YES, Field.Index.NOT_ANALYZED));
+        document.add(new StringField("highlightedTitle", resHighlTitle, Field.Store.YES));
 
       }
       // write back the transformed document

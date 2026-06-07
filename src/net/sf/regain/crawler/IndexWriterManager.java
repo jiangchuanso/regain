@@ -499,7 +499,7 @@ public class IndexWriterManager {
 
   private IndexWriter createIndexWriter(boolean createNewIndex)
           throws IOException {
-    IndexWriterConfig iConfig = new IndexWriterConfig(RegainToolkit.getLuceneVersion(), mAnalyzer);
+    IndexWriterConfig iConfig = new IndexWriterConfig(mAnalyzer);
 
     if (createNewIndex)
       iConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
@@ -508,10 +508,8 @@ public class IndexWriterManager {
 
     IndexWriter indexWriter = new IndexWriter(mLuceneTempIndexDir, iConfig);
 
-    int maxFieldLength = mConfig.getMaxFieldLength();
-    if (maxFieldLength > 0) {
-      indexWriter.setMaxFieldLength(maxFieldLength);
-    }
+    // Note: maxFieldLength is no longer supported in Lucene 8.x
+    // All fields are indexed with unlimited length
 
     return indexWriter;
   }

@@ -44,7 +44,7 @@ import net.sf.regain.util.sharedtag.PageResponse;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
-import org.apache.lucene.document.CompressionTools;
+import net.sf.regain.util.CompressionTools;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
@@ -427,8 +427,8 @@ public class SearchToolkit {
       }
 
       // Check whether the document is in the index
-      Analyzer analyzer = new WhitespaceAnalyzer(RegainToolkit.getLuceneVersion());
-      QueryParser parser = new QueryParser(RegainToolkit.getLuceneVersion(), "url", analyzer);
+      Analyzer analyzer = new WhitespaceAnalyzer();
+      QueryParser parser = new QueryParser("url", analyzer);
       String queryString = "\"" + transformedFileUrl + "\"";
 
       try {
