@@ -29,7 +29,6 @@ import net.sf.regain.RegainException;
 import net.sf.regain.crawler.document.AbstractPreparator;
 import net.sf.regain.crawler.document.RawDocument;
 
-import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -79,7 +78,7 @@ public class PdfBoxPreparator extends AbstractPreparator {
       stream = rawDocument.getContentAsStream();
 
       // Parse the content
-      pdfDocument = Loader.loadPDF(stream);
+      pdfDocument = PDDocument.load(stream);
 
       // Decrypt the PDF-Dokument
       if (pdfDocument.isEncrypted()) {
