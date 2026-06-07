@@ -29,16 +29,14 @@ import net.sf.regain.RegainException;
 import net.sf.regain.crawler.document.AbstractPreparator;
 import net.sf.regain.crawler.document.RawDocument;
 
-import org.apache.pdfbox.exceptions.CryptographyException;
-import org.apache.pdfbox.pdfparser.PDFParser;
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
-import org.apache.pdfbox.pdmodel.encryption.BadSecurityHandlerException;
 import org.apache.pdfbox.pdmodel.encryption.StandardDecryptionMaterial;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
-import org.apache.pdfbox.util.PDFTextStripper;
+import org.apache.pdfbox.text.PDFTextStripper;
 
 /**
  * Präpariert ein PDF-Dokument für die Indizierung.
@@ -81,9 +79,7 @@ public class PdfBoxPreparator extends AbstractPreparator {
       stream = rawDocument.getContentAsStream();
 
       // Parse the content
-      PDFParser parser = new PDFParser(stream);
-      parser.parse();
-      pdfDocument = parser.getPDDocument();
+      pdfDocument = Loader.loadPDF(stream);
 
       // Decrypt the PDF-Dokument
       if (pdfDocument.isEncrypted()) {

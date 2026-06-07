@@ -31,8 +31,8 @@ import net.sf.regain.crawler.document.AbstractPreparator;
 import net.sf.regain.crawler.document.RawDocument;
 
 import org.apache.log4j.Logger;
-import org.apache.poi.POITextExtractor;
 import org.apache.poi.extractor.ExtractorFactory;
+import org.apache.poi.extractor.POITextExtractor;
 
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 

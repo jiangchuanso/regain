@@ -34,8 +34,6 @@ import net.sf.regain.search.SearchToolkit;
 import net.sf.regain.search.access.SearchAccessController;
 import net.sf.regain.search.config.IndexConfig;
 import net.sf.regain.util.sharedtag.PageRequest;
-import org.apache.commons.collections.Factory;
-import org.apache.commons.collections.ListUtils;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
@@ -106,13 +104,7 @@ public class SearchResultsImpl implements SearchResults {
   private static Logger mLog = Logger.getLogger(SearchResultsImpl.class);
 
   /** held the transformed hits. */
-  private List lazyHitList = ListUtils.lazyList(new ArrayList(), new Factory() {
-    /** Factory for create a new LazyList-entry. */
-    @Override
-    public Object create() {
-      return new Document();
-    }
-  });
+  private List<Document> lazyHitList = new ArrayList<>();
 
   /**
    * Creates an instanz of SearchResults. This class can search over a single
@@ -429,16 +421,21 @@ public class SearchResultsImpl implements SearchResults {
   public Document getHitDocument(int index) throws RegainException {
 
     try {
-      Document currDoc = (Document) lazyHitList.get(index);
-      // The document is empty, so it's created by the factory. Replace it with the real one
-      // at this position
-      if (currDoc.getFields().isEmpty()) {
-        lazyHitList.set(index, mIndexSearcher.doc(hitScoreDocs[index].doc));
+      // Ensure list is large enough
+      while (lazyHitList.size() <= index) {
+        lazyHitList.add(null);
       }
+      
+      Document currDoc = lazyHitList.get(index);
+      // The document is null, so it hasn't been loaded yet. Load it now
+      if (currDoc == null) {
+        currDoc = mIndexSearcher.doc(hitScoreDocs[index].doc);
+        lazyHitList.set(index, currDoc);
+      }
+      return currDoc;
     } catch (Exception ex) {
       throw new RegainException("Error while accessing index", ex);
     }
-    return (Document) lazyHitList.get(index);
 
   }
 
