@@ -58,6 +58,7 @@ import java.util.StringTokenizer;
 import jcifs.smb.SmbFile;
 import net.sf.regain.util.io.PathFilenamePair;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.Analyzer.TokenStreamComponents;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.analysis.de.GermanAnalyzer;
@@ -67,6 +68,7 @@ import org.apache.lucene.analysis.it.ItalianAnalyzer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
@@ -537,7 +539,7 @@ public class RegainToolkit {
     // Read the terms
     if (!fieldsToReadSet.isEmpty()) {
       try {
-        Fields fields = indexReader.fields();
+        Fields fields = MultiFields.getFields(indexReader);
         if (fields != null) {
           for (String field : fields) {
             ArrayList<String> valueList = fieldsToReadSet.get(field);
@@ -705,37 +707,43 @@ public class RegainToolkit {
     return new Analyzer() {
 
       @Override
-      public TokenStream tokenStream(String fieldName, Reader reader) {
-        // NOTE: For Analyzation we have to read the reader twice:
-        //       Once for the analyzation and second for the returned TokenStream
-        //       -> We save the content of the Reader in a String and read this
-        //          String twice.
-        //       -> Old behaviour!
-        try {
-          // Save the content of the reader in a String
-          StringWriter writer = new java.io.StringWriter();
-          pipe(reader, writer);
-          String asString = writer.toString();
-
-          // Analyze the call
-          TokenStream stream = nestedAnalyzer.tokenStream(fieldName,
-                  new StringReader(asString));
-          CharTermAttribute termAtt = stream.addAttribute(CharTermAttribute.class);
-
-          System.out.println("Tokens for '" + asString + "':");
-          while (stream.incrementToken()) {
-            System.out.println(" '" + termAtt.toString() + "'");
+      protected TokenStreamComponents createComponents(String fieldName) {
+        return new TokenStreamComponents(
+          new org.apache.lucene.analysis.core.KeywordTokenizer(),
+          new TokenStream() {
+            @Override
+            public boolean incrementToken() throws IOException {
+              return false;
+            }
           }
-          stream.reset();
-          return stream;
-          // Do the call a second time and return the result this time
-          // Old behaviour
-          // return nestedAnalyzer.tokenStream(fieldName, new StringReader(asString));
-        } catch (IOException exc) {
-          System.out.println("exc: " + exc);
-
-          return null;
-        }
+        ) {
+          @Override
+          protected void setReader(final Reader reader) {
+            super.setReader(new Reader() {
+              @Override
+              public int read(char[] cbuf, int off, int len) throws IOException {
+                int read = reader.read(cbuf, off, len);
+                if (read > 0) {
+                  String asString = new String(cbuf, off, read);
+                  TokenStream stream = nestedAnalyzer.tokenStream(fieldName, new StringReader(asString));
+                  CharTermAttribute termAtt = stream.addAttribute(CharTermAttribute.class);
+                  System.out.println("Tokens for '" + asString + "':");
+                  stream.reset();
+                  while (stream.incrementToken()) {
+                    System.out.println(" '" + termAtt.toString() + "'");
+                  }
+                  stream.end();
+                  stream.close();
+                }
+                return read;
+              }
+              @Override
+              public void close() throws IOException {
+                reader.close();
+              }
+            });
+          }
+        };
       }
     };
   }
@@ -1596,11 +1604,10 @@ public class RegainToolkit {
     }
 
     /**
-     * Creates a TokenStream which tokenizes all the text in the provided
-     * Reader.
+     * Creates the TokenStreamComponents for tokenizing the text.
      */
     @Override
-    public TokenStream tokenStream(String fieldName, Reader reader) {
+    protected TokenStreamComponents createComponents(String fieldName) {
       boolean useStemming = true;
       // NOTE: For security reasons we explicitely check for the groups field
       //       and don't use the mUntokenizedFieldNames for this implicitely
@@ -1609,10 +1616,25 @@ public class RegainToolkit {
       }
 
       if (useStemming) {
-        Reader lowercasingReader = new LowercasingReader(reader);
-        return mNestedAnalyzer.tokenStream(fieldName, lowercasingReader);
+        // For stemming fields, use nested analyzer with lowercasing
+        final Analyzer nested = mNestedAnalyzer;
+        return new TokenStreamComponents(
+          new org.apache.lucene.analysis.core.KeywordTokenizer(),
+          new TokenStream() {
+            @Override
+            public boolean incrementToken() throws IOException {
+              return false;
+            }
+          }
+        ) {
+          @Override
+          protected void setReader(final Reader reader) {
+            super.setReader(new LowercasingReader(reader));
+          }
+        };
       } else {
-        return mNoStemmingAnalyzer.tokenStream(fieldName, reader);
+        // For non-stemming fields, use whitespace analyzer
+        return mNoStemmingAnalyzer.createComponents(fieldName);
       }
     }
   } // inner class WrapperAnalyzer

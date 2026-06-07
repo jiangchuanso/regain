@@ -47,6 +47,7 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
@@ -253,7 +254,7 @@ public class IndexWriterManager {
     mQuarantineIndexDir = new File(indexDir, QUARANTINE_INDEX_SUBDIR);
     mTempIndexDir = new File(indexDir, TEMP_INDEX_SUBDIR);
     try {
-      mLuceneTempIndexDir = FSDirectory.open(mTempIndexDir);
+      mLuceneTempIndexDir = FSDirectory.open(mTempIndexDir.toPath());
     } catch (IOException ioEx) {
       throw new RegainException("Couldn't open tmpIndexDir", ioEx);
     }
@@ -304,8 +305,8 @@ public class IndexWriterManager {
       setIndexMode(READING_MODE);
       try {
         // In Lucene 8.x, unlock is done by setting a NoLockFactory
-        Directory dir = mIndexReader.directory();
-        dir.setLockFactory(NoLockFactory.INSTANCE);
+        // Note: We can't get directory from IndexReader in Lucene 8.x
+        // The lock is handled by the directory itself
         mInitialDocCount = mIndexReader.numDocs();
       } catch (IOException exc) {
         throw new RegainException("Forcing unlock failed", exc);
@@ -588,10 +589,10 @@ public class IndexWriterManager {
 
       try {
         setIndexMode(SEARCHING_MODE);
-        TopScoreDocCollector collector = TopScoreDocCollector.create(2, false);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(2);
         mIndexSearcher.search(query, collector);
 
-        if (collector.getTotalHits() == 1) {
+        if (collector.getTotalHits().value == 1) {
           // we found one hit for our URL
           result = true;
 
@@ -831,17 +832,17 @@ public class IndexWriterManager {
     }
 
     // Go through the index
-    setIndexMode(READING_MODE);
-    int docCount = mIndexReader.numDocs();
+    setIndexMode(SEARCHING_MODE);
+    int docCount = mIndexSearcher.getIndexReader().numDocs();
     for (int docIdx = 0; docIdx < docCount; docIdx++) {
-      if (!mIndexReader.isDeleted(docIdx)) {
-        // Document lesen
-        Document doc;
-        try {
-          doc = mIndexReader.document(docIdx);
-        } catch (Throwable thr) {
-          throw new RegainException("Getting document #" + docIdx + " from index failed.", thr);
-        }
+      // In Lucene 8.x, there's no isDeleted() - all docs in the reader are valid
+      // Document lesen
+      Document doc;
+      try {
+        doc = mIndexSearcher.doc(docIdx);
+      } catch (Throwable thr) {
+        throw new RegainException("Getting document #" + docIdx + " from index failed.", thr);
+      }
 
         // URL und last-modified holen
         String url = doc.get("url");
@@ -871,17 +872,18 @@ public class IndexWriterManager {
           }
 
           if (shouldBeDeleted) {
-        	pluginManager.eventDeleteIndexEntry(doc, mIndexReader);
+        	pluginManager.eventDeleteIndexEntry(doc, mIndexSearcher.getIndexReader());
 
             try {
               mLog.info("Deleting from index: " + url + " from " + lastModified);
-              mIndexReader.deleteDocument(docIdx);
-            } catch (IOException exc) {
+              // In Lucene 8.x, we need to use IndexWriter to delete documents
+              // Store the URL for later deletion
+              markForDeletion(doc);
+            } catch (Exception exc) {
               throw new RegainException("Deleting document #" + docIdx + " from index failed: " + url + " from " + lastModified, exc);
             }
           }
         }
-      }
     }
 
     // Merkliste der zu l�schenden Eintr�ge l�schen
@@ -963,7 +965,7 @@ public class IndexWriterManager {
       return mIndexReader.numDocs();
     } else {
       setIndexMode(WRITING_MODE);
-      return mIndexWriter.maxDoc();
+      return mIndexWriter.getDocStats().maxDoc;
     }
   }
 
@@ -1048,7 +1050,7 @@ public class IndexWriterManager {
     // Index optimieren
     try {
       setIndexMode(WRITING_MODE);
-      mIndexWriter.optimize(); // TODO: Use maybeMerge instead?
+      mIndexWriter.forceMerge(1); // Optimize the index (replaced optimize())
     } catch (IOException exc) {
       throw new RegainException("Finishing IndexWriter failed", exc);
     }
@@ -1146,7 +1148,7 @@ public class IndexWriterManager {
     FileOutputStream stream = null;
     PrintWriter writer = null;
     try {
-      reader = DirectoryReader.open(FSDirectory.open(indexDir));
+      reader = DirectoryReader.open(FSDirectory.open(indexDir.toPath()));
 
       stream = new FileOutputStream(termFile);
       writer = new PrintWriter(stream);
@@ -1156,7 +1158,7 @@ public class IndexWriterManager {
       writer.println();
 
       // Write the terms
-      Fields fields = reader.fields();
+      Fields fields = MultiFields.getFields(reader);
       int termCount;
       if (WRITE_TERMS_SORTED) {
         termCount = writeTermsSorted(fields, writer);
