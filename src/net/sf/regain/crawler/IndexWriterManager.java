@@ -42,11 +42,14 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermEnum;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -1152,12 +1155,12 @@ public class IndexWriterManager {
       writer.println();
 
       // Write the terms
-      TermEnum termEnum = reader.terms();
+      Fields fields = reader.fields();
       int termCount;
       if (WRITE_TERMS_SORTED) {
-        termCount = writeTermsSorted(termEnum, writer);
+        termCount = writeTermsSorted(fields, writer);
       } else {
-        termCount = writeTermsSimply(termEnum, writer);
+        termCount = writeTermsSimply(fields, writer);
       }
 
       mLog.info("Wrote " + termCount + " terms into " + termFile.getAbsolutePath());
@@ -1187,21 +1190,28 @@ public class IndexWriterManager {
    * <p>
    * Diese Methode braucht minimale Ressourcen.
    *
-   * @param termEnum Die Aufz�hlung mit allen Termen.
+   * @param fields Die Fields aus dem IndexReader.
    * @param writer Der Writer auf den geschrieben werden soll.
    *
    * @return Die Anzahl der Terme.
    * @throws IOException Wenn das Schreiben fehl schlug.
    */
-  private int writeTermsSimply(TermEnum termEnum, PrintWriter writer)
+  private int writeTermsSimply(Fields fields, PrintWriter writer)
           throws IOException {
     int termCount = 0;
-    while (termEnum.next()) {
-      Term term = termEnum.term();
-      writer.println(term.text());
-      termCount++;
+    if (fields != null) {
+      for (String field : fields) {
+        Terms terms = fields.terms(field);
+        if (terms != null) {
+          TermsEnum termsEnum = terms.iterator();
+          BytesRef term;
+          while ((term = termsEnum.next()) != null) {
+            writer.println(term.utf8ToString());
+            termCount++;
+          }
+        }
+      }
     }
-
     return termCount;
   }
 
@@ -1212,19 +1222,27 @@ public class IndexWriterManager {
    * es zu viele sind, k�nnte das schief gehen. In diesem Fall sollte man auf simples
    * Schreiben umstellen.
    *
-   * @param termEnum Die Aufz�hlung mit allen Termen.
+   * @param fields Die Fields aus dem IndexReader.
    * @param writer Der Writer auf den geschrieben werden soll.
    *
    * @return Die Anzahl der Terme.
    * @throws IOException Wenn das Schreiben fehl schlug.
    */
-  private int writeTermsSorted(TermEnum termEnum, PrintWriter writer)
+  private int writeTermsSorted(Fields fields, PrintWriter writer)
           throws IOException {
     // Put all terms in a list for a later sorting
     ArrayList<String> list = new ArrayList<String>();
-    while (termEnum.next()) {
-      Term term = termEnum.term();
-      list.add(term.text());
+    if (fields != null) {
+      for (String field : fields) {
+        Terms terms = fields.terms(field);
+        if (terms != null) {
+          TermsEnum termsEnum = terms.iterator();
+          BytesRef term;
+          while ((term = termsEnum.next()) != null) {
+            list.add(term.utf8ToString());
+          }
+        }
+      }
     }
 
     String[] asArr = new String[list.size()];

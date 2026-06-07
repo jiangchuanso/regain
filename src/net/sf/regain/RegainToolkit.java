@@ -59,15 +59,18 @@ import jcifs.smb.SmbFile;
 import net.sf.regain.util.io.PathFilenamePair;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.WhitespaceAnalyzer;
+import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.analysis.de.GermanAnalyzer;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.fr.FrenchAnalyzer;
 import org.apache.lucene.analysis.it.ItalianAnalyzer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermEnum;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Version;
 
 /**
@@ -542,15 +545,20 @@ public class RegainToolkit {
     // Read the terms
     if (!fieldsToReadSet.isEmpty()) {
       try {
-        TermEnum termEnum = indexReader.terms();
-        while (termEnum.next()) {
-          Term term = termEnum.term();
-          String field = term.field();
-
-          ArrayList<String> valueList = fieldsToReadSet.get(field);
-          if (valueList != null) {
-            // This is a value of a wanted field
-            valueList.add(term.text());
+        Fields fields = indexReader.fields();
+        if (fields != null) {
+          for (String field : fields) {
+            ArrayList<String> valueList = fieldsToReadSet.get(field);
+            if (valueList != null) {
+              Terms terms = fields.terms(field);
+              if (terms != null) {
+                TermsEnum termsEnum = terms.iterator();
+                BytesRef term;
+                while ((term = termsEnum.next()) != null) {
+                  valueList.add(term.utf8ToString());
+                }
+              }
+            }
           }
         }
       } catch (IOException exc) {

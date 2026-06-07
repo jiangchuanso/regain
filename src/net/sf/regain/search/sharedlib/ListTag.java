@@ -30,7 +30,7 @@ import net.sf.regain.util.sharedtag.PageResponse;
 import net.sf.regain.util.sharedtag.SharedTag;
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.index.IndexableField;
 
 /**
  * The list tag encloses the JSP code that should be repeated for every shown
@@ -132,7 +132,7 @@ public class ListTag extends SharedTag implements SearchConstants {
       if (!(order == null || order.length() == 0 || order.startsWith(SortingOption.RELEVANCE))) {
         String fieldName = order.substring(0, order.lastIndexOf("_"));
         //System.out.println("none standard order. fieldname: " + fieldName);
-        Fieldable field = hit.getFieldable(fieldName);
+        IndexableField field = hit.getField(fieldName);
         String fieldContent = null;
         if (field != null) {
           fieldContent = field.stringValue();

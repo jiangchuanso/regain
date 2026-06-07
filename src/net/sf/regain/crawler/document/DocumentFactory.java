@@ -46,7 +46,7 @@ import net.sf.regain.crawler.plugin.CrawlerPluginManager;
 import net.sf.regain.util.io.PathFilenamePair;
 
 import org.apache.log4j.Logger;
-import org.apache.lucene.analysis.WhitespaceTokenizer;
+import org.apache.lucene.analysis.core.WhitespaceTokenizer;
 import org.apache.lucene.document.CompressionTools;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.document.Document;

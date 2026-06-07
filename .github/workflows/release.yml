@@ -1,4 +1,4 @@
-name: Build and Release JDK6 Project
+name: Build and Release JDK8 Project
 
 on:
   push:
@@ -21,37 +21,22 @@ jobs:
           # 如果是手动触发，使用输入的标签
           ref: ${{ github.event.inputs.release_tag }}
 
-      - name: Set up JDK 6
-        run: |
-          # 下载 Azul Zulu OpenJDK 6
-          JDK6_URL="https://cdn.azul.com/zulu/bin/zulu6.22.0.3-jdk6.0.119-linux_x64.tar.gz"
-          wget -q $JDK6_URL -O jdk6.tar.gz
-          tar -xzf jdk6.tar.gz
-          sudo mv zulu6.22.0.3-jdk6.0.119-linux_x64 /opt/jdk6
-          echo "JAVA_HOME=/opt/jdk6" >> $GITHUB_ENV
-          echo "/opt/jdk6/bin" >> $GITHUB_PATH
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
 
       - name: Verify Java version
         run: |
           java -version
           javac -version
 
-      - name: Install Apache Ant 1.9.x (JDK 6 compatible)
+      - name: Install Apache Ant
         run: |
-          # 卸载系统自带的 Ant
-          sudo apt-get remove -y ant ant-optional 2>/dev/null || true
-          
-          # 下载与 JDK6 兼容的 Ant 1.9.16
-          ANT_VERSION="1.9.16"
-          ANT_URL="https://archive.apache.org/dist/ant/binaries/apache-ant-${ANT_VERSION}-bin.tar.gz"
-          echo "Downloading Ant ${ANT_VERSION}..."
-          wget -q $ANT_URL -O ant.tar.gz
-          tar -xzf ant.tar.gz
-          sudo mv apache-ant-${ANT_VERSION} /opt/ant
-          
-          # 设置环境变量
-          echo "ANT_HOME=/opt/ant" >> $GITHUB_ENV
-          echo "/opt/ant/bin" >> $GITHUB_PATH
+          sudo apt-get update
+          sudo apt-get install -y ant
+          echo "ANT_HOME=/usr/share/ant" >> $GITHUB_ENV
 
       - name: Verify Ant version
         run: |
@@ -74,7 +59,7 @@ jobs:
             echo "is-preview=false" >> build.properties
             echo "debug=true" >> build.properties
             echo "skip_integration_tests=true" >> build.properties
-            echo "java-api-location=https://docs.oracle.com/javase/6/docs/api/" >> build.properties
+            echo "java-api-location=https://docs.oracle.com/javase/8/docs/api/" >> build.properties
             echo "deploy-target.dir=./deploy" >> build.properties
             echo "test-preparator-docs=./test/docs" >> build.properties
             echo "installer.executable=makensis" >> build.properties
@@ -86,26 +71,12 @@ jobs:
           echo "================================"
 
       - name: Run Ant build
-        env:
-          JAVA_HOME: /opt/jdk6
-          ANT_HOME: /opt/ant
         run: |
-          # 使用 public-no-installer 目标，因为它不依赖 Windows 特定的安装程序
           echo "Running Ant build..."
           echo "JAVA_HOME=$JAVA_HOME"
-          echo "ANT_HOME=$ANT_HOME"
           ant -version
           java -version
-          
-          # 解决方法：创建符号链接，使用不同的路径
-          # 这样可以避免 build.xml 中的有问题的条件判断
-          # 该条件会在 java.dir == env.JAVA_HOME 时错误地触发构建失败
-          sudo ln -sf /opt/jdk6 /opt/jdk6-build
-          echo "Created symlink: /opt/jdk6-build -> /opt/jdk6"
-          ls -la /opt/jdk6-build/bin/javac
-          
-          # 显式设置 java.dir 以覆盖 build.properties 中的值
-          ant public-no-installer -Dskip_integration_tests=true -Djava.dir=/opt/jdk6-build
+          ant public-no-installer -Dskip_integration_tests=true
 
       - name: List build artifacts
         run: |
@@ -165,8 +136,8 @@ jobs:
             Regain Search Engine ${{ steps.tag.outputs.TAG }}
             
             ## 构建信息
-            - Java 版本: OpenJDK 6
-            - Ant 版本: 1.9.16 (JDK 6 兼容)
+            - Java 版本: OpenJDK 8
+            - Ant 版本: 系统 Ant
             - 构建平台: Ubuntu Latest
             - 构建工具: Apache Ant
             

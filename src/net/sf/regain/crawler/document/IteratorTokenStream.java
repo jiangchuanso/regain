@@ -23,7 +23,8 @@ package net.sf.regain.crawler.document;
 import java.io.IOException;
 import java.util.Iterator;
 
-import org.apache.lucene.analysis.Token;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 
 /**
  * A token stream reading tokens from an iterator.
@@ -31,10 +32,13 @@ import org.apache.lucene.analysis.Token;
  *
  * @author Til Schneider, www.murfman.de
  */
-public class IteratorTokenStream /*extends TokenStream*/ {
+public class IteratorTokenStream extends TokenStream {
 
   /** An iterator providing Strings. */
-  private Iterator mIter;
+  private Iterator<String> mIter;
+  
+  /** The char term attribute. */
+  private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
 
 
   /**
@@ -42,19 +46,20 @@ public class IteratorTokenStream /*extends TokenStream*/ {
    *
    * @param iter An iterator providing Strings.
    */
-  public IteratorTokenStream(Iterator iter) {
+  public IteratorTokenStream(Iterator<String> iter) {
     mIter = iter;
   }
 
 
-  // overridden
-  public Token next() throws IOException {
+  @Override
+  public boolean incrementToken() throws IOException {
     if (mIter.hasNext()) {
-      String text = (String) mIter.next();
-      return new Token(text, 0, text.length());
+      String text = mIter.next();
+      clearAttributes();
+      termAtt.append(text);
+      return true;
     } else {
-      return null;
+      return false;
     }
   }
-
 }
