@@ -539,18 +539,15 @@ public class RegainToolkit {
     // Read the terms
     if (!fieldsToReadSet.isEmpty()) {
       try {
-        Fields fields = MultiFields.getFields(indexReader);
-        if (fields != null) {
-          for (String field : fields) {
-            ArrayList<String> valueList = fieldsToReadSet.get(field);
-            if (valueList != null) {
-              Terms terms = fields.terms(field);
-              if (terms != null) {
-                TermsEnum termsEnum = terms.iterator();
-                BytesRef term;
-                while ((term = termsEnum.next()) != null) {
-                  valueList.add(term.utf8ToString());
-                }
+        for (String field : fieldsToReadSet.keySet()) {
+          ArrayList<String> valueList = fieldsToReadSet.get(field);
+          if (valueList != null) {
+            Terms terms = MultiFields.getTerms(indexReader, field);
+            if (terms != null) {
+              TermsEnum termsEnum = terms.iterator();
+              BytesRef term;
+              while ((term = termsEnum.next()) != null) {
+                valueList.add(term.utf8ToString());
               }
             }
           }
@@ -708,40 +705,49 @@ public class RegainToolkit {
 
       @Override
       protected TokenStreamComponents createComponents(String fieldName) {
-        return new TokenStreamComponents(
-          new org.apache.lucene.analysis.core.KeywordTokenizer(),
-          new TokenStream() {
-            @Override
-            public boolean incrementToken() throws IOException {
-              return false;
-            }
-          }
-        ) {
+        // 创建一个简单的 Tokenizer 和 TokenStream
+        org.apache.lucene.analysis.core.KeywordTokenizer tokenizer = 
+            new org.apache.lucene.analysis.core.KeywordTokenizer();
+        TokenStream stream = new TokenStream() {
           @Override
-          protected void setReader(final Reader reader) {
-            super.setReader(new Reader() {
-              @Override
-              public int read(char[] cbuf, int off, int len) throws IOException {
-                int read = reader.read(cbuf, off, len);
-                if (read > 0) {
-                  String asString = new String(cbuf, off, read);
-                  TokenStream stream = nestedAnalyzer.tokenStream(fieldName, new StringReader(asString));
-                  CharTermAttribute termAtt = stream.addAttribute(CharTermAttribute.class);
-                  System.out.println("Tokens for '" + asString + "':");
-                  stream.reset();
-                  while (stream.incrementToken()) {
-                    System.out.println(" '" + termAtt.toString() + "'");
-                  }
-                  stream.end();
-                  stream.close();
-                }
-                return read;
+          public boolean incrementToken() throws IOException {
+            return false;
+          }
+        };
+        return new TokenStreamComponents(tokenizer, stream);
+      }
+
+      @Override
+      protected TokenStream wrapComponents(String fieldName, TokenStreamComponents components) {
+        // 不包装，直接返回
+        return components.getTokenStream();
+      }
+
+      @Override
+      protected Reader initReader(String fieldName, Reader reader) {
+        // 在这里包装 reader 来调试
+        return new Reader() {
+          @Override
+          public int read(char[] cbuf, int off, int len) throws IOException {
+            int read = reader.read(cbuf, off, len);
+            if (read > 0) {
+              String asString = new String(cbuf, off, read);
+              TokenStream stream = nestedAnalyzer.tokenStream(fieldName, new StringReader(asString));
+              CharTermAttribute termAtt = stream.addAttribute(CharTermAttribute.class);
+              System.out.println("Tokens for '" + asString + "':");
+              stream.reset();
+              while (stream.incrementToken()) {
+                System.out.println(" '" + termAtt.toString() + "'");
               }
-              @Override
-              public void close() throws IOException {
-                reader.close();
-              }
-            });
+              stream.end();
+              stream.close();
+            }
+            return read;
+          }
+          
+          @Override
+          public void close() throws IOException {
+            reader.close();
           }
         };
       }
@@ -1616,25 +1622,30 @@ public class RegainToolkit {
       }
 
       if (useStemming) {
-        // For stemming fields, use nested analyzer with lowercasing
-        final Analyzer nested = mNestedAnalyzer;
-        return new TokenStreamComponents(
-          new org.apache.lucene.analysis.core.KeywordTokenizer(),
-          new TokenStream() {
-            @Override
-            public boolean incrementToken() throws IOException {
-              return false;
-            }
-          }
-        ) {
-          @Override
-          protected void setReader(final Reader reader) {
-            super.setReader(new LowercasingReader(reader));
-          }
-        };
+        // For stemming fields, use nested analyzer
+        return mNestedAnalyzer.createComponents(fieldName);
       } else {
         // For non-stemming fields, use whitespace analyzer
         return mNoStemmingAnalyzer.createComponents(fieldName);
+      }
+    }
+
+    /**
+     * Wraps the reader to provide lowercasing.
+     */
+    @Override
+    protected Reader initReader(String fieldName, Reader reader) {
+      boolean useStemming = true;
+      if (fieldName.equals(RegainToolkit.FIELD_ACCESS_CONTROL_GROUPS) || mUntokenizedFieldNames.contains(fieldName)) {
+        useStemming = false;
+      }
+
+      if (useStemming) {
+        // For stemming fields, use lowercasing reader
+        return new LowercasingReader(reader);
+      } else {
+        // For non-stemming fields, return original reader
+        return reader;
       }
     }
   } // inner class WrapperAnalyzer
