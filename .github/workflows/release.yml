@@ -1,0 +1,152 @@
+name: Build and Release JDK8 Project
+
+on:
+  push:
+    tags:
+      - 'v*'  # 推送标签时触发
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag name (e.g., v1.6.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # 如果是手动触发，使用输入的标签；否则使用当前分支
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      - name: Verify Java version
+        run: |
+          java -version
+          javac -version
+
+      - name: Install Apache Ant
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ant
+          echo "ANT_HOME=/usr/share/ant" >> $GITHUB_ENV
+
+      - name: Verify Ant version
+        run: |
+          echo "ANT_HOME: $ANT_HOME"
+          echo "JAVA_HOME: $JAVA_HOME"
+          ant -version
+
+      - name: Prepare build.properties
+        run: |
+          # 创建全新的 build.properties 文件，不包含 java.dir
+          # 如果存在示例文件，则从中提取配置
+          if [ -f "build.properties.sample" ]; then
+            echo "Using build.properties.sample as base..."
+            # 从示例文件复制，但排除 java.dir 行
+            grep -v "^java.dir=" build.properties.sample > build.properties || true
+          else
+            echo "Creating new build.properties..."
+            # 创建基本的 build.properties 文件
+            echo "version.prefix=1.6.0" > build.properties
+            echo "is-preview=false" >> build.properties
+            echo "debug=true" >> build.properties
+            echo "skip_integration_tests=true" >> build.properties
+            echo "java-api-location=https://docs.oracle.com/javase/8/docs/api/" >> build.properties
+            echo "deploy-target.dir=./deploy" >> build.properties
+            echo "test-preparator-docs=./test/docs" >> build.properties
+            echo "installer.executable=makensis" >> build.properties
+          fi
+          
+          # 显示配置文件内容（用于调试）
+          echo "=== build.properties content ==="
+          cat build.properties
+          echo "================================"
+
+      - name: Run Ant build
+        run: |
+          echo "Running Ant build..."
+          echo "JAVA_HOME=$JAVA_HOME"
+          ant -version
+          java -version
+          ant public-no-installer -Dskip_integration_tests=true
+
+      - name: List build artifacts
+        run: |
+          echo "Build artifacts:"
+          ls -la build/public/ || echo "build/public/ directory not found"
+          # 创建工作目录用于归档
+          mkdir -p artifacts
+          if [ -d "build/public" ]; then
+            cp build/public/* artifacts/
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: regain-build-artifacts
+          path: artifacts/
+          retention-days: 7
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
+
+      - name: Determine tag name
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "TAG=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+          else
+            # 从 github.ref (refs/tags/v1.6.0) 提取标签名
+            echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: regain-build-artifacts
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG }}
+          name: Release ${{ steps.tag.outputs.TAG }}
+          files: artifacts/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: false
+          body: |
+            Regain Search Engine ${{ steps.tag.outputs.TAG }}
+            
+            ## 构建信息
+            - Java 版本: OpenJDK 8
+            - Ant 版本: 系统 Ant
+            - 构建平台: Ubuntu Latest
+            - 构建工具: Apache Ant
+            
+            ## 包含的文件
+            - Server 版本
+            - Desktop (Windows 和 Linux)
+            - 文档
+            - 源码
+            
+            ## 安装说明
+            请查看项目文档了解如何部署和使用。
