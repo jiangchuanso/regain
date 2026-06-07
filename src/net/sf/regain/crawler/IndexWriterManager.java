@@ -43,6 +43,7 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.Fields;
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -57,6 +58,7 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopScoreDocCollector;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.store.NoLockFactory;
 
 /**
  * Kontrolliert und kapselt die Erstellung des Suchindex.
@@ -301,8 +303,9 @@ public class IndexWriterManager {
       // Force an unlock of the index (we just created a copy so this is save)
       setIndexMode(READING_MODE);
       try {
-
-        IndexWriter.unlock(mIndexReader.directory());
+        // In Lucene 8.x, unlock is done by setting a NoLockFactory
+        Directory dir = mIndexReader.directory();
+        dir.setLockFactory(NoLockFactory.INSTANCE);
         mInitialDocCount = mIndexReader.numDocs();
       } catch (IOException exc) {
         throw new RegainException("Forcing unlock failed", exc);
@@ -475,7 +478,7 @@ public class IndexWriterManager {
     if ((mode == READING_MODE) && (mIndexReader == null)) {
       mLog.info("Switching to index mode: deleting mode");
       try {
-        mIndexReader = IndexReader.open(mLuceneTempIndexDir, false);
+        mIndexReader = DirectoryReader.open(mLuceneTempIndexDir);
       } catch (IOException exc) {
         throw new RegainException("Creating IndexReader failed", exc);
       }
@@ -485,7 +488,7 @@ public class IndexWriterManager {
     if ((mode == SEARCHING_MODE) && (mIndexSearcher == null)) {
       mLog.info("Switching to index mode: searching mode");
       try {
-        mIndexSearcher = new IndexSearcher(mLuceneTempIndexDir, false);
+        mIndexSearcher = new IndexSearcher(DirectoryReader.open(mLuceneTempIndexDir));
       } catch (IOException exc) {
         throw new RegainException("Creating IndexSearcher failed", exc);
       }
@@ -620,7 +623,7 @@ public class IndexWriterManager {
       Document doc;
       try {
         setIndexMode(SEARCHING_MODE);
-        TopScoreDocCollector collector = TopScoreDocCollector.create(20, false);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(20);
         mIndexSearcher.search(query, collector);
         ScoreDoc[] hits = collector.topDocs().scoreDocs;
 
@@ -1143,7 +1146,7 @@ public class IndexWriterManager {
     FileOutputStream stream = null;
     PrintWriter writer = null;
     try {
-      reader = IndexReader.open(FSDirectory.open(indexDir));
+      reader = DirectoryReader.open(FSDirectory.open(indexDir));
 
       stream = new FileOutputStream(termFile);
       writer = new PrintWriter(stream);

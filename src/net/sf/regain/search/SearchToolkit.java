@@ -446,7 +446,7 @@ public class SearchToolkit {
       try {
         searcher = manager.getIndexSearcher();
 
-        TopScoreDocCollector collector = TopScoreDocCollector.create(1, false);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(1);
         searcher.search(query, collector);
         nbHits = collector.getTotalHits();
       } catch (IOException exc) {
