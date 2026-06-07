@@ -539,15 +539,18 @@ public class RegainToolkit {
     // Read the terms
     if (!fieldsToReadSet.isEmpty()) {
       try {
-        for (String field : fieldsToReadSet.keySet()) {
-          ArrayList<String> valueList = fieldsToReadSet.get(field);
-          if (valueList != null) {
-            Terms terms = MultiFields.getTerms(indexReader, field);
-            if (terms != null) {
-              TermsEnum termsEnum = terms.iterator();
-              BytesRef term;
-              while ((term = termsEnum.next()) != null) {
-                valueList.add(term.utf8ToString());
+        Fields fields = MultiFields.getFields(indexReader);
+        if (fields != null) {
+          for (String field : fields) {
+            ArrayList<String> valueList = fieldsToReadSet.get(field);
+            if (valueList != null) {
+              Terms terms = fields.terms(field);
+              if (terms != null) {
+                TermsEnum termsEnum = terms.iterator();
+                BytesRef term;
+                while ((term = termsEnum.next()) != null) {
+                  valueList.add(term.utf8ToString());
+                }
               }
             }
           }
@@ -702,54 +705,10 @@ public class RegainToolkit {
    */
   private static Analyzer createAnalysingAnalyzer(final Analyzer nestedAnalyzer) {
     return new Analyzer() {
-
       @Override
       protected TokenStreamComponents createComponents(String fieldName) {
-        // 创建一个简单的 Tokenizer 和 TokenStream
-        org.apache.lucene.analysis.core.KeywordTokenizer tokenizer = 
-            new org.apache.lucene.analysis.core.KeywordTokenizer();
-        TokenStream stream = new TokenStream() {
-          @Override
-          public boolean incrementToken() throws IOException {
-            return false;
-          }
-        };
-        return new TokenStreamComponents(tokenizer, stream);
-      }
-
-      @Override
-      protected TokenStream wrapComponents(String fieldName, TokenStreamComponents components) {
-        // 不包装，直接返回
-        return components.getTokenStream();
-      }
-
-      @Override
-      protected Reader initReader(String fieldName, Reader reader) {
-        // 在这里包装 reader 来调试
-        return new Reader() {
-          @Override
-          public int read(char[] cbuf, int off, int len) throws IOException {
-            int read = reader.read(cbuf, off, len);
-            if (read > 0) {
-              String asString = new String(cbuf, off, read);
-              TokenStream stream = nestedAnalyzer.tokenStream(fieldName, new StringReader(asString));
-              CharTermAttribute termAtt = stream.addAttribute(CharTermAttribute.class);
-              System.out.println("Tokens for '" + asString + "':");
-              stream.reset();
-              while (stream.incrementToken()) {
-                System.out.println(" '" + termAtt.toString() + "'");
-              }
-              stream.end();
-              stream.close();
-            }
-            return read;
-          }
-          
-          @Override
-          public void close() throws IOException {
-            reader.close();
-          }
-        };
+        // 直接使用嵌套的 analyzer
+        return nestedAnalyzer.createComponents(fieldName);
       }
     };
   }
@@ -1622,30 +1581,14 @@ public class RegainToolkit {
       }
 
       if (useStemming) {
-        // For stemming fields, use nested analyzer
-        return mNestedAnalyzer.createComponents(fieldName);
+        // For stemming fields, use nested analyzer with lowercasing
+        org.apache.lucene.analysis.core.KeywordTokenizer tokenizer = 
+            new org.apache.lucene.analysis.core.KeywordTokenizer();
+        TokenStream filter = new org.apache.lucene.analysis.LowerCaseFilter(tokenizer);
+        return new TokenStreamComponents(tokenizer, filter);
       } else {
         // For non-stemming fields, use whitespace analyzer
         return mNoStemmingAnalyzer.createComponents(fieldName);
-      }
-    }
-
-    /**
-     * Wraps the reader to provide lowercasing.
-     */
-    @Override
-    protected Reader initReader(String fieldName, Reader reader) {
-      boolean useStemming = true;
-      if (fieldName.equals(RegainToolkit.FIELD_ACCESS_CONTROL_GROUPS) || mUntokenizedFieldNames.contains(fieldName)) {
-        useStemming = false;
-      }
-
-      if (useStemming) {
-        // For stemming fields, use lowercasing reader
-        return new LowercasingReader(reader);
-      } else {
-        // For non-stemming fields, return original reader
-        return reader;
       }
     }
   } // inner class WrapperAnalyzer

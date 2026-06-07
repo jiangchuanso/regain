@@ -33,7 +33,6 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
-import org.apache.pdfbox.pdmodel.encryption.StandardDecryptionMaterial;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import org.apache.pdfbox.text.PDFTextStripper;
 
@@ -83,12 +82,13 @@ public class PdfBoxPreparator extends AbstractPreparator {
       // Decrypt the PDF-Dokument
       if (pdfDocument.isEncrypted()) {
         mLog.debug("Document is encrypted: " + url);
-        StandardDecryptionMaterial sdm = new StandardDecryptionMaterial("");
-        pdfDocument.openProtection(sdm);
-        AccessPermission ap = pdfDocument.getCurrentAccessPermission();
-
-        if (!ap.canExtractContent()) {
-          throw new RegainException("Document is encrypted and can't be opened: " + url);
+        try {
+          AccessPermission ap = pdfDocument.getCurrentAccessPermission();
+          if (!ap.canExtractContent()) {
+            throw new RegainException("Document is encrypted and can't be opened: " + url);
+          }
+        } catch (Exception e) {
+          throw new RegainException("Document is encrypted and can't be opened: " + url, e);
         }
       }
 
@@ -103,10 +103,10 @@ public class PdfBoxPreparator extends AbstractPreparator {
 
       // extract annotations
       StringBuilder annotsResult = new StringBuilder();
-      List allPages = pdfDocument.getDocumentCatalog().getAllPages();
+      List<PDPage> allPages = pdfDocument.getPages();
       for (int i = 0; i < allPages.size(); i++) {
         int pageNum = i + 1;
-        PDPage page = (PDPage) allPages.get(i);
+        PDPage page = allPages.get(i);
         List<PDAnnotation> annotations = page.getAnnotations();
         if (annotations.size() < 1) {
           continue;

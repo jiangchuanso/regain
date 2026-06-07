@@ -592,7 +592,7 @@ public class IndexWriterManager {
         TopScoreDocCollector collector = TopScoreDocCollector.create(2);
         mIndexSearcher.search(query, collector);
 
-        if (collector.getTotalHits().value == 1) {
+        if (collector.getTotalHits() == 1) {
           // we found one hit for our URL
           result = true;
 

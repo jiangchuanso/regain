@@ -115,7 +115,7 @@ public class IndexSearcherManager implements Closeable {
 
     try
     {
-      mSearcherManager = new SearcherManager(FSDirectory.open(mWorkingIndexDir), new SearcherFactory());
+      mSearcherManager = new SearcherManager(FSDirectory.open(mWorkingIndexDir.toPath()), new SearcherFactory());
     }
     catch (IOException e)
     {
