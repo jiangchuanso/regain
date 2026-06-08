@@ -25,10 +25,11 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
-import java.util.zip.DataFormatException;
+
 
 import net.sf.regain.RegainException;
 import net.sf.regain.RegainToolkit;
@@ -55,6 +56,7 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopScoreDocCollector;
+import org.apache.lucene.util.BytesRef;
 
 /**
  * A toolkit for the search JSPs containing helper methods.
@@ -446,7 +448,7 @@ public class SearchToolkit {
       try {
         searcher = manager.getIndexSearcher();
 
-        TopScoreDocCollector collector = TopScoreDocCollector.create(1);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(1, Integer.MAX_VALUE);
         searcher.search(query, collector);
         nbHits = collector.getTotalHits();
       } catch (IOException exc) {
@@ -473,35 +475,28 @@ public class SearchToolkit {
    * @return Modified Query
    */
   public static BooleanQuery addAccessControlToQuery(Query query, String[] allGroups) {
-    // Create a query that matches any group
-    BooleanQuery groupQuery = new BooleanQuery();
-
-    // Not very logical behaviour, in my opinion: If no groups are returned by the SearchAccessController, all files are shown.
-    // However, if one of the Controllers returns a group, then suddenly this super-admin-capability vanished.
-    // Maybe allow "null" as Super-Admin, "empty array" as No-Permissions-At-All?
     if ((allGroups == null || allGroups.length == 0)) {
       if (query instanceof BooleanQuery) {
         return (BooleanQuery) query;
       } else {
-        groupQuery.add(query, Occur.MUST);
-        return groupQuery;
+        BooleanQuery.Builder groupBuilder = new BooleanQuery.Builder();
+        groupBuilder.add(query, Occur.MUST);
+        return groupBuilder.build();
       }
     }
 
+    BooleanQuery.Builder groupBuilder = new BooleanQuery.Builder();
     for (String group : allGroups) {
-      // Add as OR
-      groupQuery.add(new TermQuery(new Term(RegainToolkit.FIELD_ACCESS_CONTROL_GROUPS, group)),
+      groupBuilder.add(new TermQuery(new Term(RegainToolkit.FIELD_ACCESS_CONTROL_GROUPS, group)),
               Occur.SHOULD);
     }
+    BooleanQuery groupQuery = groupBuilder.build();
 
-    // Create a main query that contains the group query and the search query
-    // combined with AND
-    BooleanQuery mainQuery = new BooleanQuery();
-    mainQuery.add(query, Occur.MUST);
-    mainQuery.add(groupQuery, Occur.MUST);
+    BooleanQuery.Builder mainBuilder = new BooleanQuery.Builder();
+    mainBuilder.add(query, Occur.MUST);
+    mainBuilder.add(groupQuery, Occur.MUST);
 
-    // Set the main query as query to use
-    return mainQuery;
+    return mainBuilder.build();
   }
 
   /**
@@ -649,13 +644,15 @@ public class SearchToolkit {
    * @throws RegainException	If decompression failed.
    */
   public static String getCompressedFieldValue(Document doc, String fieldname) throws RegainException {
-    byte[] compressedFieldValue = doc.getBinaryValue(fieldname);
+    BytesRef binaryValue = doc.getBinaryValue(fieldname);
     String value = "";
-    if (compressedFieldValue != null) {
+    if (binaryValue != null) {
       try {
+        byte[] compressedFieldValue = Arrays.copyOfRange(
+            binaryValue.bytes, binaryValue.offset, binaryValue.offset + binaryValue.length);
         value = CompressionTools.decompressString(compressedFieldValue);
-      } catch (DataFormatException dataFormatException) {
-        throw new RegainException("Couldn't uncompress field value.", dataFormatException);
+      } catch (IOException ex) {
+        throw new RegainException("Couldn't uncompress field value.", ex);
       }
     }
     return value;

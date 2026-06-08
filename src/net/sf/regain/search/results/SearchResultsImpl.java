@@ -48,6 +48,7 @@ import org.apache.lucene.index.MultiReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
@@ -129,8 +130,8 @@ public class SearchResultsImpl implements SearchResults {
 
     String queryText = null;
 
-    BooleanQuery mimeQuery = new BooleanQuery();
-    queryText = removeMimetypeQuery(mQueryText, mimeQuery);
+    BooleanQuery.Builder mimeBuilder = new BooleanQuery.Builder();
+    queryText = removeMimetypeQuery(mQueryText, mimeBuilder);
 
     try {
     // If there is at least on index
@@ -163,7 +164,11 @@ public class SearchResultsImpl implements SearchResults {
         mAnalyzer = indexSearcherManagers[0].getAnalyzer();
         mIndexName = indexConfigs[0].getName();
         readerArray[0] = mIndexSearcher.getIndexReader();
-        mMultiReader = new MultiReader(readerArray, false);
+        try {
+          mMultiReader = new MultiReader(readerArray, false);
+        } catch (IOException ex) {
+          throw new RegainException("Error creating MultiReader", ex);
+        }
 
       } else {
         // Collect all IndexSearchers and instantiate a MultiSearcher
@@ -171,7 +176,11 @@ public class SearchResultsImpl implements SearchResults {
           searchers[j] = indexSearcherManagers[j].getIndexSearcher();
           readerArray[j] = searchers[j].getIndexReader();
         }
-        mMultiReader = new MultiReader(readerArray, false);
+        try {
+          mMultiReader = new MultiReader(readerArray, false);
+        } catch (IOException ex) {
+          throw new RegainException("Error creating MultiReader", ex);
+        }
 
         if (indexSearcherManagers[0] != null) {
           indexSearcherManagers[0].releaseIndexSearcher(mIndexSearcher);
@@ -189,7 +198,7 @@ public class SearchResultsImpl implements SearchResults {
         // start the creation of the lucene query object
 
         try {
-          mQuery = new BooleanQuery();
+          BooleanQuery.Builder mQueryBuilder = new BooleanQuery.Builder();
 
           for (int k = 0; k < indexConfigs.length; k++) {
 
@@ -203,17 +212,18 @@ public class SearchResultsImpl implements SearchResults {
 //              if (!searchFieldArr[i].equals("filename")) {
                 Query fieldQuery = parser.parse(queryText);
                 // Add as OR
-                mQuery.add(fieldQuery, Occur.SHOULD);
+                mQueryBuilder.add(fieldQuery, Occur.SHOULD);
 //              } else {
 //                // The field filename is not stemmed
-//                mQuery.add(new TermQuery(new Term("filename", queryText)), Occur.SHOULD);
+//                mQueryBuilder.add(new TermQuery(new Term("filename", queryText)), Occur.SHOULD);
 //              }
             }
             if (mLog.isDebugEnabled()) {
-              mLog.debug("Query: '" + queryText + "' -> '" + mQuery.toString() + "'");
+              mLog.debug("Query: '" + queryText + "' -> '" + mQueryBuilder.toString() + "'");
             }
 
           }
+          mQuery = mQueryBuilder.build();
         } catch (ParseException exc) {
           throw new RegainException("Error while parsing search pattern '" + mQueryText
                   + "': " + exc.getMessage(), exc);
@@ -226,14 +236,19 @@ public class SearchResultsImpl implements SearchResults {
       }
 
       // Add the mimetype field search
-      if (mimeQuery.getClauses().length > 0) {
+      BooleanQuery mimeQuery = mimeBuilder.build();
+      if (mimeQuery.clauses().size() > 0) {
 
         if (mQuery != null) {
-          mimeQuery.add(mQuery, Occur.MUST);
+          BooleanQuery.Builder finalBuilder = new BooleanQuery.Builder();
+          finalBuilder.add(mQuery, Occur.MUST);
+          for (BooleanClause clause : mimeQuery.clauses()) {
+            finalBuilder.add(clause);
+          }
+          mQuery = finalBuilder.build();
+        } else {
+          mQuery = mimeQuery;
         }
-
-        // Set the main query as query to use
-        mQuery = mimeQuery;
       }
 
 
@@ -287,7 +302,7 @@ public class SearchResultsImpl implements SearchResults {
    * @param mainQuery   MIME clauses that were extracted from the query
    * @return  New query text (old query without the mime clauses)
    */
-  private String removeMimetypeQuery(String queryText, BooleanQuery mainQuery)
+  private String removeMimetypeQuery(String queryText, BooleanQuery.Builder mainBuilder)
   {
     if (queryText == null) {
       return null;
@@ -310,13 +325,13 @@ public class SearchResultsImpl implements SearchResults {
         queryText = queryText.replace(matcher.group(1), "");
         //System.out.println("Query after mimetype removing: " + queryText);
 
-        mainQuery.add(getAtomicMimeTypeQuery(mimeTypeFieldText), Occur.MUST_NOT);
+        mainBuilder.add(getAtomicMimeTypeQuery(mimeTypeFieldText), Occur.MUST_NOT);
       }
     } while (found);
 
     // Now positive mimes
 
-    BooleanQuery positiveMimes = new BooleanQuery();
+    BooleanQuery.Builder positiveMimesBuilder = new BooleanQuery.Builder();
     do
     {
       matcher = mimetypeFieldPattern.matcher(queryText);
@@ -328,11 +343,12 @@ public class SearchResultsImpl implements SearchResults {
         queryText = queryText.replace(matcher.group(1), "");
         //System.out.println("Query after mimetype removing: " + queryText);
 
-        positiveMimes.add(getAtomicMimeTypeQuery(mimeTypeFieldText), Occur.SHOULD);
+        positiveMimesBuilder.add(getAtomicMimeTypeQuery(mimeTypeFieldText), Occur.SHOULD);
       }
     } while (found);
-    if (positiveMimes.getClauses().length > 0) {
-      mainQuery.add(positiveMimes, Occur.MUST);
+    BooleanQuery positiveMimes = positiveMimesBuilder.build();
+    if (positiveMimes.clauses().size() > 0) {
+      mainBuilder.add(positiveMimes, Occur.MUST);
     }
 
     // Remove empty clauses that remained
@@ -355,21 +371,16 @@ public class SearchResultsImpl implements SearchResults {
    * @param mimeTypeFieldText   The value of a mime Type
    * @return  The corresponding query
    */
-  private BooleanQuery getAtomicMimeTypeQuery(String mimeTypeFieldText)
+  private Query getAtomicMimeTypeQuery(String mimeTypeFieldText)
   {
-    BooleanQuery mimetypeFieldQuery = new BooleanQuery();
     Term term = new Term("mimetype", mimeTypeFieldText);
 
-    Query query;
     if (mimeTypeFieldText.contains("*")) {
-      query = new WildcardQuery(term);
+      return new WildcardQuery(term);
     }
     else {
-      query = new TermQuery(term);
+      return new TermQuery(term);
     }
-
-    mimetypeFieldQuery.add(query, Occur.SHOULD);
-    return mimetypeFieldQuery;
   }
 
   /**

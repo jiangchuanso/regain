@@ -34,7 +34,6 @@ import org.apache.log4j.Logger;
 import org.apache.poi.extractor.ExtractorFactory;
 import org.apache.poi.extractor.POITextExtractor;
 
-import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 
 /**
  * Prepares all MS*-documents using POI
@@ -119,10 +118,6 @@ public class PoiMsOfficePreparator extends AbstractPreparator {
       } else if (metaDataMap.containsKey("PID_TITLE")) {
         setTitle(metaDataMap.get("PID_TITLE"));
       }
-
-    } catch (InvalidFormatException invalidFormatEx) {
-      throw new RegainException("Invalid format while reading MS* (OpenXML) document. URL: "
-              + rawDocument.getUrl(), invalidFormatEx);
 
     } catch (Exception e) {
       throw new RegainException("Reading MS* (OpenXML) document failed : " + rawDocument.getUrl(), e);

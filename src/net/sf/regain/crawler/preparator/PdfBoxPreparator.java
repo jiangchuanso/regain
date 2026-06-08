@@ -103,10 +103,10 @@ public class PdfBoxPreparator extends AbstractPreparator {
 
       // extract annotations
       StringBuilder annotsResult = new StringBuilder();
-      List<PDPage> allPages = pdfDocument.getPages();
-      for (int i = 0; i < allPages.size(); i++) {
+      int pageCount = pdfDocument.getNumberOfPages();
+      for (int i = 0; i < pageCount; i++) {
         int pageNum = i + 1;
-        PDPage page = allPages.get(i);
+        PDPage page = pdfDocument.getPage(i);
         List<PDAnnotation> annotations = page.getAnnotations();
         if (annotations.size() < 1) {
           continue;
@@ -155,13 +155,6 @@ public class PdfBoxPreparator extends AbstractPreparator {
         mLog.debug("Extracted meta data ::" + getCleanedMetaData()
                 + ":: from " + rawDocument.getUrl());
       }
-
-    } catch (CryptographyException exc) {
-      throw new RegainException("Error decrypting document: " + url, exc);
-
-    } catch (BadSecurityHandlerException exc) {
-      // They didn't supply a password and the default of "" was wrong.
-      throw new RegainException("Document is encrypted: " + url, exc);
 
     } catch (IOException exc) {
       throw new RegainException("Error reading document: " + url, exc);

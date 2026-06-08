@@ -40,7 +40,7 @@ public class SortingOption implements Comparable {
   public static String PATH = "path_sort";
   private String sortFieldName;
   private boolean reverse;
-  private int sortType;
+  private SortField.Type sortType;
   private String description;
   private int id;
 
@@ -61,32 +61,32 @@ public class SortingOption implements Comparable {
     } else if (orderFromRequest.startsWith(FILENAME)) {
       sortFieldName = FILENAME;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.STRING_VAL;
+      sortType = SortField.Type.STRING_VAL;
 
     } else if (orderFromRequest.startsWith(SIZE)) {
       sortFieldName = SIZE;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.LONG;
+      sortType = SortField.Type.LONG;
 
     } else if (orderFromRequest.startsWith(MIMETYPE)) {
       sortFieldName = MIMETYPE;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.STRING_VAL;
+      sortType = SortField.Type.STRING_VAL;
 
     } else if (orderFromRequest.startsWith(LAST_MODIFIED)) {
       sortFieldName = LAST_MODIFIED;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.STRING_VAL;
+      sortType = SortField.Type.STRING_VAL;
 
     } else if (orderFromRequest.startsWith(TITLE)) {
       sortFieldName = TITLE;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.STRING;
+      sortType = SortField.Type.STRING;
 
     } else if (orderFromRequest.startsWith(PATH)) {
       sortFieldName = PATH;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.STRING;
+      sortType = SortField.Type.STRING;
 
     } else {
       setRelevance();
@@ -130,7 +130,7 @@ public class SortingOption implements Comparable {
   private void setRelevance() {
     sortFieldName = RELEVANCE;
     reverse = false;
-    sortType = SortField.FLOAT;
+    sortType = SortField.Type.FLOAT;
 
   }
 
@@ -163,7 +163,7 @@ public class SortingOption implements Comparable {
   /**
    * @return the sortType
    */
-  public int getSortType() {
+  public SortField.Type getSortType() {
     return sortType;
   }
 

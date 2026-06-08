@@ -66,9 +66,10 @@ import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.fr.FrenchAnalyzer;
 import org.apache.lucene.analysis.it.ItalianAnalyzer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.index.Fields;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.MultiTerms;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
@@ -539,12 +540,13 @@ public class RegainToolkit {
     // Read the terms
     if (!fieldsToReadSet.isEmpty()) {
       try {
-        Fields fields = MultiFields.getFields(indexReader);
-        if (fields != null) {
-          for (String field : fields) {
+        FieldInfos fieldInfos = FieldInfos.getMergedFieldInfos(indexReader);
+        if (fieldInfos != null) {
+          for (FieldInfo fi : fieldInfos) {
+            String field = fi.name;
             ArrayList<String> valueList = fieldsToReadSet.get(field);
             if (valueList != null) {
-              Terms terms = fields.terms(field);
+              Terms terms = MultiTerms.getTerms(indexReader, field);
               if (terms != null) {
                 TermsEnum termsEnum = terms.iterator();
                 BytesRef term;
@@ -704,13 +706,7 @@ public class RegainToolkit {
    *         analysiert.
    */
   private static Analyzer createAnalysingAnalyzer(final Analyzer nestedAnalyzer) {
-    return new Analyzer() {
-      @Override
-      protected TokenStreamComponents createComponents(String fieldName) {
-        // 直接使用嵌套的 analyzer
-        return nestedAnalyzer.createComponents(fieldName);
-      }
-    };
+    return nestedAnalyzer;
   }
 
   /**
@@ -1587,8 +1583,9 @@ public class RegainToolkit {
         TokenStream filter = new org.apache.lucene.analysis.LowerCaseFilter(tokenizer);
         return new TokenStreamComponents(tokenizer, filter);
       } else {
-        // For non-stemming fields, use whitespace analyzer
-        return mNoStemmingAnalyzer.createComponents(fieldName);
+        // For non-stemming fields, use whitespace tokenizer
+        return new TokenStreamComponents(
+            new org.apache.lucene.analysis.core.WhitespaceTokenizer());
       }
     }
   } // inner class WrapperAnalyzer

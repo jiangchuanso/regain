@@ -306,7 +306,8 @@
            source="1.8"
            target="1.8"
            fork="true"
-           includeantruntime="false">
+           includeantruntime="false"
+           encoding="UTF-8">
       <compilerarg value="-Xlint"/>
       <src>
         <path refid="sourcepath"/>
@@ -753,6 +754,7 @@
       <include name="org/apache/lucene/**"/>
       <include name="org/tartarus/**"/>
       <include name="org/apache/log4j/**"/>
+      <include name="org/apache/logging/**"/>
       <include name="org/apache/regexp/**"/>
       <include name="org/apache/commons/**"/>
 

@@ -42,12 +42,13 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.MultiTerms;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
@@ -303,14 +304,10 @@ public class IndexWriterManager {
     if (updateIndex) {
       // Force an unlock of the index (we just created a copy so this is save)
       setIndexMode(READING_MODE);
-      try {
-        // In Lucene 8.x, unlock is done by setting a NoLockFactory
-        // Note: We can't get directory from IndexReader in Lucene 8.x
-        // The lock is handled by the directory itself
-        mInitialDocCount = mIndexReader.numDocs();
-      } catch (IOException exc) {
-        throw new RegainException("Forcing unlock failed", exc);
-      }
+      // In Lucene 8.x, unlock is done by setting a NoLockFactory
+      // Note: We can't get directory from IndexReader in Lucene 8.x
+      // The lock is handled by the directory itself
+      mInitialDocCount = mIndexReader.numDocs();
     }
 
     // Write the stopWordList and the exclusionList in a file so it can be found
@@ -457,12 +454,7 @@ public class IndexWriterManager {
 
     // Close the mIndexSearcher in ALL_CLOSED_MODE
     if ((mode == ALL_CLOSED_MODE) && (mIndexSearcher != null)) {
-      try {
-        mIndexSearcher.close();
-        mIndexSearcher = null;
-      } catch (IOException exc) {
-        throw new RegainException("Closing IndexSearcher failed", exc);
-      }
+      mIndexSearcher = null;
     }
 
     // Open the mIndexWriter in WRITING_MODE
@@ -589,7 +581,7 @@ public class IndexWriterManager {
 
       try {
         setIndexMode(SEARCHING_MODE);
-        TopScoreDocCollector collector = TopScoreDocCollector.create(2);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(2, Integer.MAX_VALUE);
         mIndexSearcher.search(query, collector);
 
         if (collector.getTotalHits() == 1) {
@@ -624,7 +616,7 @@ public class IndexWriterManager {
       Document doc;
       try {
         setIndexMode(SEARCHING_MODE);
-        TopScoreDocCollector collector = TopScoreDocCollector.create(20);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(20, Integer.MAX_VALUE);
         mIndexSearcher.search(query, collector);
         ScoreDoc[] hits = collector.topDocs().scoreDocs;
 
@@ -1158,12 +1150,11 @@ public class IndexWriterManager {
       writer.println();
 
       // Write the terms
-      Fields fields = MultiFields.getFields(reader);
       int termCount;
       if (WRITE_TERMS_SORTED) {
-        termCount = writeTermsSorted(fields, writer);
+        termCount = writeTermsSorted(reader, writer);
       } else {
-        termCount = writeTermsSimply(fields, writer);
+        termCount = writeTermsSimply(reader, writer);
       }
 
       mLog.info("Wrote " + termCount + " terms into " + termFile.getAbsolutePath());
@@ -1199,12 +1190,13 @@ public class IndexWriterManager {
    * @return Die Anzahl der Terme.
    * @throws IOException Wenn das Schreiben fehl schlug.
    */
-  private int writeTermsSimply(Fields fields, PrintWriter writer)
+  private int writeTermsSimply(IndexReader reader, PrintWriter writer)
           throws IOException {
     int termCount = 0;
-    if (fields != null) {
-      for (String field : fields) {
-        Terms terms = fields.terms(field);
+    FieldInfos fieldInfos = FieldInfos.getMergedFieldInfos(reader);
+    if (fieldInfos != null) {
+      for (FieldInfo fi : fieldInfos) {
+        Terms terms = MultiTerms.getTerms(reader, fi.name);
         if (terms != null) {
           TermsEnum termsEnum = terms.iterator();
           BytesRef term;
@@ -1231,13 +1223,14 @@ public class IndexWriterManager {
    * @return Die Anzahl der Terme.
    * @throws IOException Wenn das Schreiben fehl schlug.
    */
-  private int writeTermsSorted(Fields fields, PrintWriter writer)
+  private int writeTermsSorted(IndexReader reader, PrintWriter writer)
           throws IOException {
     // Put all terms in a list for a later sorting
     ArrayList<String> list = new ArrayList<String>();
-    if (fields != null) {
-      for (String field : fields) {
-        Terms terms = fields.terms(field);
+    FieldInfos fieldInfos = FieldInfos.getMergedFieldInfos(reader);
+    if (fieldInfos != null) {
+      for (FieldInfo fi : fieldInfos) {
+        Terms terms = MultiTerms.getTerms(reader, fi.name);
         if (terms != null) {
           TermsEnum termsEnum = terms.iterator();
           BytesRef term;
