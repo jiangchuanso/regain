@@ -38,18 +38,18 @@ public class NoncesManager
   private static final String NONCE_STORE_CONTEXTATTRIBUTE_NAME = "nonces.used.";
 
   /**
-   * @var Current system time
+   * Current system time
    */
   private long now;
 
   /**
-   * @var System-specific salt.
+   * System-specific salt.
    * We can't put in a static string here, as this wouldn't be secret anymore.
    */
   private String salt;
 
   /**
-   * @var Request for nonceStore
+   * Request for nonceStore
    */
   private PageRequest mRequest;
 

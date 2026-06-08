@@ -37,8 +37,10 @@ import java.util.Set;
  * (Helper Class)
  *
  * Contract:
+ * <ul>
  * <li>It is possible to put several identical key-value pairs (i.e. where key and value is equal)
  * <li>entrySet is not supported. Instead, it can be iterated over all entries.
+ * </ul>
  *
  * @param <K>	Key
  * @param <V>	Value

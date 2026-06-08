@@ -1269,7 +1269,7 @@ public class RegainToolkit {
    *
    * @param url The URL to extract the file name from.
    * @return The file name that matches the URL.
-   * @throws RegainException.
+   * @throws RegainException
    */
   public static String urlToWhitespacedFileName(String url) throws RegainException {
 

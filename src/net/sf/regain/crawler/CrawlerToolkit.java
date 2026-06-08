@@ -697,7 +697,6 @@ public class CrawlerToolkit {
    * @param url the URL for enrichment
    * @param entry the account password entry
    * @return URL with replacement
-   * @throws net.sf.regain.RegainException
    */
   public static String replaceAuthenticationValuesInURL(String url, AccountPasswordEntry entry) {
 

@@ -61,8 +61,8 @@ import java.util.Hashtable;
  * <p>
  * Sie kann HTML-Entit�ten in ihre Entsprechungen übersetzten und umgekehrt.
  * <p>
- * für's Hinterk�pfchen: Eine HTML-Entit�t ist z.B. '&amp;' oder '&Uuml;', diese
- * wird dann vom Browser in z.B. '&' oder '�' übersetzt.
+ * für's Hinterk�pfchen: Eine HTML-Entit�t ist z.B. '{@literal &amp;}' oder '{@literal &Uuml;}', diese
+ * wird dann vom Browser in z.B. '{@literal &}' oder '�' übersetzt.
  */
 public class HtmlEntities {
 

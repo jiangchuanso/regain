@@ -1184,7 +1184,7 @@ public class IndexWriterManager {
    * <p>
    * Diese Methode braucht minimale Ressourcen.
    *
-   * @param fields Die Fields aus dem IndexReader.
+   * @param reader Der IndexReader.
    * @param writer Der Writer auf den geschrieben werden soll.
    *
    * @return Die Anzahl der Terme.
@@ -1217,7 +1217,7 @@ public class IndexWriterManager {
    * es zu viele sind, k�nnte das schief gehen. In diesem Fall sollte man auf simples
    * Schreiben umstellen.
    *
-   * @param fields Die Fields aus dem IndexReader.
+   * @param reader Der IndexReader.
    * @param writer Der Writer auf den geschrieben werden soll.
    *
    * @return Die Anzahl der Terme.

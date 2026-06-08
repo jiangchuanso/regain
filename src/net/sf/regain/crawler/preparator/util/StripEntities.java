@@ -3,34 +3,33 @@ package net.sf.regain.crawler.preparator.util;
 import java.util.HashMap;
 
 /**
- * <pre>
- *                 Strips HTML entities such as &quot; from a file, replacing them by their
- *                 Unicode equivalents. Methods can be used on text strings as well. Does not
- *                 strip Tags, just Entities. No longer requires entitiestochar.ser in the jar!
- * <p/>
- *                 @author Roedy Green
- *                 @version 1.6
- *                 @since 2002 July 14 version
- * <p/>
- *                 version 1.0 - initial version
- * <p/>
- *                 version 1.1 - optimise using
- *                        text.indexOf('&amp;') and sb.append(string) rather than processing
- *                        character by character.
- * <p/>
- *                 version 1.2 2004-07-21 - add stripHTMLTags -
- *                        stripFile also strips tags - add stripNbsp
- * <p/>
- *                 version 1.3 2005-06-20 - fix bug in possEntityToChar
- *                        - exposed possEntityToChar as public
- * <p/>
- *                 Version 1.4 2005-07-02 - check for null input
- * <p/>
- *                 Version 1.5 2005-07-29 - no longer needs entitiestochar.ser file.
- *                        Converted to JDK 1.5 back to 1,2
- *                 Version 1.6 2005-09-05 - faster code for stripHTMLTags that returns
- *                        original string if nothing changed.
- * </pre>
+ * Strips HTML entities such as &quot; from a file, replacing them by their
+ * Unicode equivalents. Methods can be used on text strings as well. Does not
+ * strip Tags, just Entities. No longer requires entitiestochar.ser in the jar!
+ * <p>
+ * @author Roedy Green
+ * @version 1.6
+ * @since 2002 July 14 version
+ * <p>
+ * version 1.0 - initial version
+ * <br>
+ * version 1.1 - optimise using
+ *        text.indexOf('{@literal &}amp;') and sb.append(string) rather than processing
+ *        character by character.
+ * <br>
+ * version 1.2 2004-07-21 - add stripHTMLTags -
+ *        stripFile also strips tags - add stripNbsp
+ * <br>
+ * version 1.3 2005-06-20 - fix bug in possEntityToChar
+ *        - exposed possEntityToChar as public
+ * <br>
+ * Version 1.4 2005-07-02 - check for null input
+ * <br>
+ * Version 1.5 2005-07-29 - no longer needs entitiestochar.ser file.
+ *        Converted to JDK 1.5 back to 1,2
+ * <br>
+ * Version 1.6 2005-09-05 - faster code for stripHTMLTags that returns
+ *        original string if nothing changed.
  */
 public class StripEntities {
 
@@ -38,13 +37,13 @@ public class StripEntities {
 
     /**
      * Longest an entity can be {@value #LONGEST_ENTITY}, at least in our
-     * tables, including the lead & and trail ;
+     * tables, including the lead {@literal &} and trail ;
      */
     public static final int LONGEST_ENTITY = 10;/* &thetasym; */
 
     /**
      * The shortest an entity can be {@value #SHORTEST_ENTITY}, at least in our
-     * tables, including the lead & and trailing ;
+     * tables, including the lead {@literal &} and trailing ;
      */
     public static final int SHORTEST_ENTITY = 4;/* &#1; &lt; */
 
@@ -627,7 +626,7 @@ public class StripEntities {
      * @param text raw text to be processed. Must not be null.
      *
      * @return translated text. It also handles HTML 4.0 entities such as
-     *         &hearts; &#123; and &x#123; &nbsp; -> 160. null input returns
+     *         {@literal &hearts;} {@literal &#123;} and {@literal &x#123;} {@literal &nbsp;} -&gt; 160. null input returns
      *         null.
      */
     public static String stripEntities( String text )
@@ -690,7 +689,7 @@ public class StripEntities {
      * Checks a number of gauntlet conditions to ensure this is a valid entity.
      * Converts Entity to corresponding char.
      *
-     * @param possEntity string that may hold an entity. Lead & must be stripped, but may
+     * @param possEntity string that may hold an entity. Lead {@literal &} must be stripped, but may
      *                   contain text past the ;
      *
      * @return corresponding unicode character, or 0 if the entity is invalid.
@@ -720,7 +719,7 @@ public class StripEntities {
     /**
      * convert an entity to a single char
      *
-     * @param entity String entity to convert convert. must have lead & and trail ;
+     * @param entity String entity to convert convert. must have lead {@literal &} and trail ;
      *               stripped; may be a x#123 or #123 style entity. Works faster if
      *               entity in lower case.
      *
@@ -781,7 +780,7 @@ public class StripEntities {
 
     /**
      * Removes tags from HTML leaving just the raw text. Leaves entities as is,
-     * e.g. does not convert &amp; back to &. similar to code in Quoter. Also
+     * e.g. does not convert {@literal &amp;} back to {@literal &}. similar to code in Quoter. Also
      * removes <!-- --> comments
      *
      * @param html input HTML

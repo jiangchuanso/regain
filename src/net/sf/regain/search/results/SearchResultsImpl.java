@@ -299,7 +299,7 @@ public class SearchResultsImpl implements SearchResults {
   /**
    * Create a Query from mime type terms and remove them from the query text
    * @param queryText   Original query text
-   * @param mainQuery   MIME clauses that were extracted from the query
+   * @param mainBuilder Builder receiving MIME clauses extracted from the query
    * @return  New query text (old query without the mime clauses)
    */
   private String removeMimetypeQuery(String queryText, BooleanQuery.Builder mainBuilder)
@@ -468,7 +468,6 @@ public class SearchResultsImpl implements SearchResults {
    * @return the score of one hit.
    *
    * @throws RegainException If getting the score failed.
-   * @see Hits#score(int)
    */
   @Override
   public float getHitScore(int index) throws RegainException {
