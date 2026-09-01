@@ -52,9 +52,12 @@ import net.sf.regain.util.FieldHelper;
 import org.apache.lucene.document.DateTools;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.NumericDocValuesField;
+import org.apache.lucene.document.SortedDocValuesField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
+import org.apache.lucene.util.BytesRef;
 import org.apache.regexp.RE;
 import org.apache.regexp.RESyntaxException;
 import org.ontoware.rdf2go.model.node.impl.URIImpl;
@@ -582,11 +585,13 @@ public class DocumentFactory {
       //String asString = pathToString(path);
       doc.add(new StoredField("path", pfPair.getPath()));
       doc.add(new StringField("path_sort", pfPair.getPath().toLowerCase(), Field.Store.YES));
+      doc.add(new SortedDocValuesField("path_sort", new BytesRef(pfPair.getPath().toLowerCase())));
 
       // Write the path to an analysis file
       writeAnalysisFile(url, "path", pfPair.getPath());
     } else {
       doc.add(new StringField("path_sort", "", Field.Store.YES));
+      doc.add(new SortedDocValuesField("path_sort", new BytesRef("")));
     }
 
     return doc;

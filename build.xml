@@ -340,6 +340,7 @@
            debug="${debug}"
            deprecation="true"
            target="1.8"
+           encoding="UTF-8"
            includeantruntime="false">
       <src path="test/src"/>
       <exclude name="net/sf/regain/test/integration/**"/>
@@ -367,6 +368,7 @@
            debug="${debug}"
            deprecation="true"
            target="1.8"
+           encoding="UTF-8"
            includeantruntime="false">
       <src>
         <pathelement location="test/src/net/sf/regain/test/integration"/>

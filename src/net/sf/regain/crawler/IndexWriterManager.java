@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 
 import net.sf.regain.RegainException;
 import net.sf.regain.RegainToolkit;
@@ -53,6 +55,8 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -218,6 +222,12 @@ public class IndexWriterManager {
    * Die URL bildet den key, der LastUpdated-String die value.
    */
   private HashMap<String, String> mUrlsToDeleteHash;
+
+  /**
+   * enthält die URLs der vorgemerkten Dokumente, deren letzter
+   * Vorbereitungslauf fehlgeschlagen ist (Feld "preparation-error" gesetzt).
+   */
+  private HashSet<String> mUrlsWithPrepError;
 
   /** Crawler Plugin Manager instance */
   private CrawlerPluginManager pluginManager = CrawlerPluginManager.getInstance();
@@ -825,6 +835,7 @@ public class IndexWriterManager {
 
     // Go through the index
     setIndexMode(SEARCHING_MODE);
+    List<Query> deleteQueries = new ArrayList<Query>();
     int docCount = mIndexSearcher.getIndexReader().numDocs();
     for (int docIdx = 0; docIdx < docCount; docIdx++) {
       // In Lucene 8.x, there's no isDeleted() - all docs in the reader are valid
@@ -866,20 +877,44 @@ public class IndexWriterManager {
           if (shouldBeDeleted) {
         	pluginManager.eventDeleteIndexEntry(doc, mIndexSearcher.getIndexReader());
 
-            try {
-              mLog.info("Deleting from index: " + url + " from " + lastModified);
-              // In Lucene 8.x, we need to use IndexWriter to delete documents
-              // Store the URL for later deletion
-              markForDeletion(doc);
-            } catch (Exception exc) {
-              throw new RegainException("Deleting document #" + docIdx + " from index failed: " + url + " from " + lastModified, exc);
+            mLog.info("Marking for deletion from index: " + url + " from " + lastModified);
+            // NOTE: The actual deletion is done below using an IndexWriter,
+            //       because a read-only IndexReader can't delete documents
+            //       in Lucene 8.x
+            markForDeletion(doc);
+
+            // Build a precise query for this document, so a newly added entry
+            // for the same URL is not deleted as well
+            BooleanQuery.Builder delBuilder = new BooleanQuery.Builder();
+            delBuilder.add(new TermQuery(new Term("url", url)), BooleanClause.Occur.MUST);
+            if (lastModified != null) {
+              delBuilder.add(new TermQuery(new Term("last-modified", lastModified)),
+                      BooleanClause.Occur.MUST);
             }
+            if (doc.get("preparation-error") != null) {
+              delBuilder.add(new TermQuery(new Term("preparation-error", "true")),
+                      BooleanClause.Occur.MUST);
+            }
+            deleteQueries.add(delBuilder.build());
           }
         }
     }
 
-    // Merkliste der zu l�schenden Eintr�ge l�schen
+    // Perform the deletion of all entries that were marked for deletion
+    if (!deleteQueries.isEmpty()) {
+      try {
+        setIndexMode(WRITING_MODE);
+        for (Query query : deleteQueries) {
+          mIndexWriter.deleteDocuments(query);
+        }
+      } catch (IOException exc) {
+        throw new RegainException("Deleting obsolete index entries failed", exc);
+      }
+    }
+
+    // Merkliste der zu löschenden Einträge löschen
     mUrlsToDeleteHash = null;
+    mUrlsWithPrepError = null;
   }
 
   /**
@@ -916,6 +951,12 @@ public class IndexWriterManager {
     if ((url != null) || (lastModified != null)) {
       mLog.info("Marking old entry for a later deletion: " + url + " from " + lastModified);
       mUrlsToDeleteHash.put(url, lastModified);
+      if (doc.get("preparation-error") != null) {
+        if (mUrlsWithPrepError == null) {
+          mUrlsWithPrepError = new HashSet<String>();
+        }
+        mUrlsWithPrepError.add(url);
+      }
     }
   }
 
@@ -940,9 +981,22 @@ public class IndexWriterManager {
       return false;
     }
 
-    // Prüfen, ob es einen Eintrag für diese URL gibt und ob er dem
-    // last-modified des Dokuments entspricht
+    // Prüfen, ob es einen Eintrag für diese URL gibt
     String lastModifiedToDelete = mUrlsToDeleteHash.get(url);
+    if (lastModifiedToDelete == null) {
+      return false;
+    }
+
+    // Prüfen, ob das Dokument und der gemerkte Eintrag hinsichtlich eines
+    // Vorbereitungsfehlers übereinstimmen. Andernfalls würde bei einem
+    // fehlgeschlagenen Vorbereitungslauf auch der frisch erzeugte Eintrag
+    // gelöscht werden.
+    boolean docHasError = doc.get("preparation-error") != null;
+    boolean markedHasError = (mUrlsWithPrepError != null) && mUrlsWithPrepError.contains(url);
+    if (docHasError != markedHasError) {
+      return false;
+    }
+
     return lastModified.equals(lastModifiedToDelete);
   }
 

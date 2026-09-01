@@ -61,7 +61,7 @@ public class SortingOption implements Comparable {
     } else if (orderFromRequest.startsWith(FILENAME)) {
       sortFieldName = FILENAME;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.Type.STRING_VAL;
+      sortType = SortField.Type.STRING;
 
     } else if (orderFromRequest.startsWith(SIZE)) {
       sortFieldName = SIZE;
@@ -71,12 +71,12 @@ public class SortingOption implements Comparable {
     } else if (orderFromRequest.startsWith(MIMETYPE)) {
       sortFieldName = MIMETYPE;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.Type.STRING_VAL;
+      sortType = SortField.Type.STRING;
 
     } else if (orderFromRequest.startsWith(LAST_MODIFIED)) {
       sortFieldName = LAST_MODIFIED;
       reverse = isReverse(orderFromRequest);
-      sortType = SortField.Type.STRING_VAL;
+      sortType = SortField.Type.STRING;
 
     } else if (orderFromRequest.startsWith(TITLE)) {
       sortFieldName = TITLE;

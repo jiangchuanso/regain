@@ -58,7 +58,7 @@ import java.util.StringTokenizer;
 import jcifs.smb.SmbFile;
 import net.sf.regain.util.io.PathFilenamePair;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.Analyzer.TokenStreamComponents;
+import org.apache.lucene.analysis.AnalyzerWrapper;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.analysis.de.GermanAnalyzer;
@@ -1536,11 +1536,12 @@ public class RegainToolkit {
 
   // inner class WrapperAnalyzer
   /**
-   * An analyzer that changes a document in lowercase before delivering
-   * it to a nested analyzer. For the field "groups" an analyzer is used that
-   * only tokenizes the input without stemming the tokens.
+   * Ein Analyzer, der den Text aller Felder in Kleinschreibung umwandelt, bevor
+   * er an einen verschachtelten Analyzer übergeben wird. Für das Feld "groups"
+   * und alle untokenisierten Felder wird ein Analyzer verwendet, der die
+   * Eingabe nur tokenisiert, ohne sie zu verändern.
    */
-  private static class WrapperAnalyzer extends Analyzer {
+  private static class WrapperAnalyzer extends AnalyzerWrapper {
 
     /** The analyzer to use for a field that shouldn't be stemmed. */
     private Analyzer mNoStemmingAnalyzer;
@@ -1557,6 +1558,7 @@ public class RegainToolkit {
      *        tokenized.
      */
     public WrapperAnalyzer(Analyzer nestedAnalyzer, String[] untokenizedFieldNames) {
+      super(Analyzer.PER_FIELD_REUSE_STRATEGY);
       mNoStemmingAnalyzer = new WhitespaceAnalyzer();
       mNestedAnalyzer = nestedAnalyzer;
 
@@ -1565,10 +1567,10 @@ public class RegainToolkit {
     }
 
     /**
-     * Creates the TokenStreamComponents for tokenizing the text.
+     * Gets the analyzer to use for the given field.
      */
     @Override
-    protected TokenStreamComponents createComponents(String fieldName) {
+    protected Analyzer getWrappedAnalyzer(String fieldName) {
       boolean useStemming = true;
       // NOTE: For security reasons we explicitely check for the groups field
       //       and don't use the mUntokenizedFieldNames for this implicitely
@@ -1577,15 +1579,21 @@ public class RegainToolkit {
       }
 
       if (useStemming) {
-        // For stemming fields, use nested analyzer with lowercasing
-        org.apache.lucene.analysis.core.KeywordTokenizer tokenizer = 
-            new org.apache.lucene.analysis.core.KeywordTokenizer();
-        TokenStream filter = new org.apache.lucene.analysis.LowerCaseFilter(tokenizer);
-        return new TokenStreamComponents(tokenizer, filter);
+        return mNestedAnalyzer;
       } else {
-        // For non-stemming fields, use whitespace tokenizer
-        return new TokenStreamComponents(
-            new org.apache.lucene.analysis.core.WhitespaceTokenizer());
+        return mNoStemmingAnalyzer;
+      }
+    }
+
+    /**
+     * Lowercases the text before it reaches the nested analyzer.
+     */
+    @Override
+    protected Reader wrapReader(String fieldName, Reader reader) {
+      if (getWrappedAnalyzer(fieldName) == mNestedAnalyzer) {
+        return new LowercasingReader(reader);
+      } else {
+        return reader;
       }
     }
   } // inner class WrapperAnalyzer
