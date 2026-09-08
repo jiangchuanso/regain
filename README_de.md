@@ -1,4 +1,6 @@
-[English translation](README.md)
+🌍 [中文](README.zh-CN.md) · [English](README.md) · **Deutsch**
+
+---
 
 regain <span style="font-size: 50%">your hidden information</span>
 ==================================================================
@@ -83,7 +85,3 @@ Die Arbeit ist für denjenigen interessant, der ein wenig mehr über die Hinterg
 Download: [Seminararbeit_Lucene_Ausarbeitung.pdf](http://regain.sourceforge.net/download/Seminararbeit_Lucene_Ausarbeitung.pdf)
 
 Download: [Seminararbeit_Lucene_Vortrag.pdf](http://regain.sourceforge.net/download/Seminararbeit_Lucene_Vortrag.pdf)
-
----
-
-🌍 [Sprache wechseln / Switch Language](README.md)

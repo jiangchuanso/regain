@@ -1,3 +1,7 @@
+🌍 **中文** · [English](README.md) · [Deutsch](README_de.md)
+
+---
+
 # regain <span style="font-size: 50%">your hidden information</span>
 ==================================================================
 
@@ -81,7 +85,3 @@ Java 类和标签库的文档。对于那些想要开发 regain 的人来说很�
 下载：[Seminararbeit_Lucene_Ausarbeitung.pdf (in German language)](http://regain.sourceforge.net/download/Seminararbeit_Lucene_Ausarbeitung.pdf)
 
 下载：[Seminararbeit_Lucene_Vortrag.pdf (in German language)](http://regain.sourceforge.net/download/Seminararbeit_Lucene_Vortrag.pdf)
-
----
-
-🌍 [切换语言 / Switch Language](README.md)
