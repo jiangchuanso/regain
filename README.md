@@ -1,6 +1,8 @@
-[Deutsche Übersetzung](README_de.md)
+🌍 [中文](README.zh-CN.md) · **English** · [Deutsch](README_de.md)
 
-regain <span style="font-size: 50%">your hidden information</span>
+---
+
+# regain <span style="font-size: 50%">your hidden information</span>
 ==================================================================
 
 regain is a search engine running on desktop or server with support for various file formats.

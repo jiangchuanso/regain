@@ -1,4 +1,6 @@
-[English translation](README.md)
+🌍 [中文](README.zh-CN.md) · [English](README.md) · **Deutsch**
+
+---
 
 regain <span style="font-size: 50%">your hidden information</span>
 ==================================================================
